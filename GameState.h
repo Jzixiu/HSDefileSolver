@@ -3,7 +3,9 @@
 
 #include <vector>
 #include <stack>
+#include <iostream>
 #include <istream>
+#include <ostream>
 #include <memory>
 
 #define MAX_MINION 7
@@ -26,6 +28,8 @@ public:
     // 获取能发动攻击的友方随从列表
     std::vector<int> get_ally();
 
+    void print(std::ostream &out = std::cout);
+
 private:
     struct minion
     {
@@ -46,6 +50,8 @@ private:
         bool reborn;
 
         const std::vector<int> child_id;
+
+        void print(std::ostream &out);
     };
 
     std::vector<minion> minion_template;
@@ -56,7 +62,7 @@ private:
     int ally_count;
     int enemy_count;
 
-    std::stack<std::unique_ptr<minion>> graveyard;
+    std::vector<std::unique_ptr<minion>> graveyard;
 
     int parse_minion(std::istream &in);
 

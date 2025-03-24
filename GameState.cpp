@@ -139,6 +139,50 @@ std::vector<int> GameState::get_ally()
     return res;
 }
 
+void GameState::print(std::ostream &out)
+{
+    out<<std::endl;
+    out<<"格式:[id] 攻击力/血量 (攻击次数)";
+    out<<std::endl;
+
+    out<<"模版:"<<std::endl;
+    for(int i=0;i<minion_template.size();i++)
+    {
+        minion_template[i].print(out);
+        out<<std::endl;
+    }
+    out<<std::endl;
+    out<<std::endl;
+
+    out<<"敌方:"<<std::endl;
+    for(int i=0;i<enemy_count;i++)
+    {
+        enemy[i]->print(out);
+        out<<std::endl;
+    }
+    out<<std::endl;
+    out<<std::endl;
+
+    out<<"友方:"<<std::endl;
+    for(int i=0;i<ally_count;i++)
+    {
+        ally[i]->print(out);
+        out<<std::endl;
+    }
+    out<<std::endl;
+    out<<std::endl;
+    
+    out<<"墓地:"<<std::endl;
+    for(int i=0;i<graveyard.size();i++)
+    {
+        graveyard[i]->print(out);
+        out<<std::endl;
+    }
+    out<<std::endl;
+    out<<std::endl;
+
+}
+
 GameState::minion::minion(int id, int atk, int hp, bool shield,
                           bool windfury, bool charge_or_rush, bool taunt, bool poisionous,
                           bool immune, bool reborn, std::vector<int> child)
@@ -153,6 +197,51 @@ GameState::minion::minion(int id, int atk, int hp, bool shield,
         {
             attack_chance = 2;
         }
+    }
+}
+
+void GameState::minion::print(std::ostream &out)
+{
+    out<<"["<<id<<"] ";
+    out<<atk<<"/"<<hp;
+    out<<" ("<<attack_chance<<")";
+    if(shield)
+    {
+        out<<" [圣盾]";
+    }
+    if(windfury)
+    {
+        out<<" [风怒]";
+    }
+    if(charge_or_rush)
+    {
+        out<<" [冲锋/突袭]";
+    }
+    if(taunt)
+    {
+        out<<" [嘲讽]";
+    }
+    if(poisionous)
+    {
+        out<<" [剧毒]";
+    }
+    if(immune)
+    {
+        out<<" [免疫]";
+    }
+    if(reborn)
+    {
+        out<<" [复生]";
+    }
+    if(child_id.size()>0)
+    {
+        out<<" [亡语:";
+        for(int i:child_id)
+        {
+            out<<" "<<i;
+        }
+        out<<" ";
+        out<<"]";
     }
 }
 
@@ -308,13 +397,13 @@ void GameState::kill_minion(int pos, Side side)
     if (side == SIDE_ALLY)
     {
         assert(ally[pos] != nullptr);
-        graveyard.push(std::move(ally[pos]));
+        graveyard.push_back(std::move(ally[pos]));
         ally_count--;
     }
     else if (side == SIDE_ENEMY)
     {
         assert(enemy[pos] != nullptr);
-        graveyard.push(std::move(enemy[pos]));
+        graveyard.push_back(std::move(enemy[pos]));
         enemy_count--;
     }
 }
@@ -431,15 +520,15 @@ void GameState::undo_operation(const operation &op)
         assert(graveyard.size() != 0);
         if (op.side == SIDE_ALLY)
         {
-            ally[op.pos] = std::move(graveyard.top());
+            ally[op.pos] = std::move(graveyard.back());
             ally_count++;
-            graveyard.pop();
+            graveyard.pop_back();
         }
         else if (op.side == SIDE_ENEMY)
         {
-            enemy[op.pos] = std::move(graveyard.top());
+            enemy[op.pos] = std::move(graveyard.back());
             enemy_count++;
-            graveyard.pop();
+            graveyard.pop_back();
         }
         break;
 
