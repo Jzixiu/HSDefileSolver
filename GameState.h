@@ -1,194 +1,119 @@
 #ifndef GAMESTATE_H
 #define GAMESTATE_H
 
-#include "step.h"
-#include <map>
 #include <vector>
-#include <list>
+#include <stack>
+#include <istream>
+#include <memory>
+
+#define MAX_MINION 7
 
 /**
- * @brief 可以高速管理炉石场面数据的类。
- * 复杂度:
- * m:敌方随从数量
- * n:友方随从数量
- * 构造函数:O(m+n)
- * 析构函数:O(1)
- * 所有的getter/setter: O(1)
- * atk/undo_atk: O(1)
- * 搜索函数均与结果大小有关。
+ * @brief 高速可回溯的炉石场面模拟类
  *
  */
 class GameState
 {
 public:
-    /**
-     * @brief 默认无参构造函数，从stdin读入场面数据。
-     * O(m+n)
-     */
-    GameState();
+    GameState(std::istream &in);
 
-    /**
-     * @brief 构造函数，从文件读入数据。
-     * O(m+n)
-     *
-     * @param file 文件名
-     */
-    GameState(std::string file);
-    /**
-     * @brief 析构函数。
-     * O(1)
-     *
-     */
-    ~GameState();
+    void attack(int ally_pos, int enemy_pos);
+    void undo_last_attack();
 
-    int max_hp_ally;
-    int max_hp_enemy;
+    //获取能被攻击的敌方随从列表
+    std::vector<int> get_enemy();
 
-    // 全部getter和setter为O(1)
-
-    int get_ally_count() const;
-    int get_enemy_count() const;
-    std::vector<step> get_current_step_history() const;
-
-    int get_ally_atk(int id) const;
-    int get_enemy_atk(int id) const;
-
-    int get_ally_hp(int id) const;
-    int get_enemy_hp(int id) const;
-
-    int get_enemy_full_hp(int id) const;
-
-    bool getlock_ally(int id) const;
-    bool getlock_enemy(int id) const;
-    void setlock_ally(int id, bool locked);
-    void setlock_enemy(int id, bool locked);
-
-    bool get_can_attack(int id) const; // 注意只有友方随从的can_attack才有意义
-
-    /**
-     * @brief 获取与每个随从互换的敌方随从的id。
-     * O(m*n)
-     *
-     * @return vector<vector<int>> id列表
-     */
-    std::vector<std::vector<int>> get_minion_exchange_targets() const;
-
-    /**
-     * @brief 获取一份当前血量值为hp的友方随从的列表的快照
-     * 远小于O(n)
-     *
-     * @param hp 血量值
-     * @return vector<int> id列表
-     */
-    std::vector<int> get_ally_of_hp(int hp) const;
-
-    /**
-     * @brief 获取一份当前血量值为hp的敌方随从的列表的快照
-     * 远小于O(m)
-     *
-     * @param hp 血量值
-     * @return vector<int> id列表
-     */
-    std::vector<int> get_enemy_of_hp(int hp) const;
-
-    /**
-     * @brief 获取所有血量大于hp的友方随从的id列表
-     * 远小于O(max_hp_ally+n)
-     *
-     * @param hp 血量下限（不包含）
-     * @return vector<int> 友方随从列表
-     */
-    std::vector<int> get_ally_gt_hp(int hp) const;
-
-    /**
-     * @brief 获取攻击力为attack的敌方随从的一份列表
-     * O(m)
-     *
-     * @param attack 攻击力
-     * @return vector<int> 列表
-     */
-    std::vector<int> get_enemy_of_atk(int attack) const;
-
-    /**
-     * @brief 获取所有血量大于hp的敌方随从的id列表
-     * 远小于O(max_hp_enemy+m)
-     *
-     * @param hp 血量下限（不包含）
-     * @return vector<int> 敌方随从列表
-     */
-    std::vector<int> get_enemy_gt_hp(int hp) const;
-
-    /**
-     * @brief 获取所有当前状态下可以造成总共total_damage点伤害的友方随从组合。
-     * 保证返回结果中的友方随从都是!locked且can_attack的。
-     * 远小于O(m*total_damage*(2^m))
-     *
-     * @param total_damage 要造成多少伤害
-     * @return vector<vector<int>> 友方随从组合的列表
-     */
-    std::vector<std::vector<int>> get_combo_of_atk(int total_damage) const;
-
-    /**
-     * @brief 执行s步骤中的攻击指令。
-     * O(1)
-     *
-     * @param s 步骤指令
-     */
-    void attack(step s);
-
-    /**
-     * @brief 撤销上一个攻击指令
-     * O(1)
-     *
-     * @return step
-     */
-    step undo_last_attack();
-
-    void undo_all();
-
-    void print_ally(int id) const;
-    void print_enemy(int id) const;
-    void print_state() const;
+    //获取能发动攻击的友方随从列表
+    std::vector<int> get_ally();
 
 private:
     struct minion
     {
-        int atk;
+        minion(int id, int atk, int hp, bool shield,
+               bool windfury, bool charge_or_rush, bool taunt, bool poisionous,
+               bool immune, bool reborn, std::vector<int> child);
+
+        const int id;
+        const int atk;
         int hp;
-        bool locked;
-        bool can_attack;
-        std::list<int>::iterator it;
+        int attack_chance;
+        bool shield;
+        const bool windfury;
+        const bool charge_or_rush;
+        const bool taunt;
+        const bool poisionous;
+        const bool immune;
+        bool reborn;
+
+        const std::vector<int> child_id;
     };
 
-    std::list<int> *is_hp_ally;
-    std::list<int> *is_hp_enemy;
+    std::vector<minion> minion_template;
 
-    std::vector<minion> ally;
-    std::vector<minion> enemy;
+    std::unique_ptr<minion> ally[MAX_MINION];
+    std::unique_ptr<minion> enemy[MAX_MINION];
 
-    std::vector<int> enemy_full_hp;
+    int ally_count;
+    int enemy_count;
 
-    std::vector<step> step_history;
+    std::stack<std::unique_ptr<minion>> graveyard;
 
-    /**
-     * @brief 更新某友方随从的血量。
-     * O(1)
-     *
-     * @param id 被更新随从的id
-     * @param new_hp 要更新到的hp
-     * @return int 旧hp值
-     */
-    int move_hp_ally(int id, int new_hp);
+    int parse_minion(std::istream &in);
 
-    /**
-     * @brief 更新某敌方随从的血量。
-     * O(1)
-     *
-     * @param id 被更新随从的id
-     * @param new_hp 要更新到的hp
-     * @return int 旧hp值
-     */
-    int move_hp_enemy(int id, int new_hp);
+    enum Operation_Type
+    {
+        OP_UNDEFINED,
+        OP_CREATE,
+        OP_KILL,
+        OP_MOVE,
+        OP_MODIFY_HP,
+        OP_MODIFY_ATTACK_CHANCE,
+        OP_MODIFY_SHIELD
+    };
+
+    enum Side
+    {
+        SIDE_UNDEFINED,
+        SIDE_ALLY,
+        SIDE_ENEMY
+    };
+
+    struct operation
+    {
+        operation();
+        Operation_Type type;
+        Side side;
+
+        // create,kill,modify
+        int pos;
+
+        // modify
+        int old_hp;
+        int attack_chance;
+        bool shield;
+
+        // move;
+        int from_pos;
+        int to_pos;
+    };
+
+    void create_minion(int pos, int id, Side side);
+    void kill_minion(int pos, Side side);
+    void move_minion(int from, int to, Side side);
+
+    void modify_minion_hp(int pos, Side side, int new_val);
+    void modify_minion_attack_chance(int pos, Side side, int new_val);
+    void modify_minion_shield(int pos, Side side, bool new_val);
+
+    void undo_operation(const operation &op);
+
+    std::stack<std::stack<operation>> op_stack;
+
+    // 把pos右边的所有随从都向左移动1格
+    void move_left(int pos, Side side);
+
+    // 把pos及右边的随从都向右移动offset格
+    void move_right(int pos, Side side, int offset);
 };
 
 #endif
