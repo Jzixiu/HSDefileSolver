@@ -64,31 +64,7 @@ void GameState::attack(int ally_pos, int enemy_pos)
 
         if (a.hp <= 0 || e.poisionous)
         {
-            kill_minion(ally_pos, SIDE_ALLY);
-            move_left(ally_pos, SIDE_ALLY);
-
-            int child_count = a.child_id.size();
-            if (MAX_MINION - ally_count < child_count)
-            {
-                child_count = MAX_MINION - ally_count;
-            }
-
-            if (child_count > 0)
-            {
-                move_right(ally_pos, SIDE_ALLY, child_count);
-                for (int i = 0; i < child_count; i++)
-                {
-                    create_minion(ally_pos + i, a.child_id[i], SIDE_ALLY);
-                }
-            }
-
-            if (a.reborn && ally_count < MAX_MINION)
-            {
-                move_right(ally_pos, SIDE_ALLY, 1);
-                create_minion(ally_pos, a.id, SIDE_ALLY);
-                ally[ally_pos]->reborn = false; // 应视为构造的一部分，不用接口化
-                ally[ally_pos]->hp = 1;
-            }
+            process_death(ally_pos, SIDE_ALLY);
         }
     }
 
@@ -107,31 +83,7 @@ void GameState::attack(int ally_pos, int enemy_pos)
 
         if (e.hp <= 0 || a.poisionous)
         {
-            kill_minion(enemy_pos, SIDE_ENEMY);
-            move_left(enemy_pos, SIDE_ENEMY);
-
-            int child_count = e.child_id.size();
-            if (MAX_MINION - enemy_count < child_count)
-            {
-                child_count = MAX_MINION - enemy_count;
-            }
-
-            if (child_count > 0)
-            {
-                move_right(enemy_pos, SIDE_ENEMY, child_count);
-                for (int i = 0; i < child_count; i++)
-                {
-                    create_minion(enemy_pos + i, e.child_id[i], SIDE_ENEMY);
-                }
-            }
-
-            if (e.reborn && enemy_count < MAX_MINION)
-            {
-                move_right(enemy_pos, SIDE_ENEMY, 1);
-                create_minion(enemy_pos, e.id, SIDE_ENEMY);
-                enemy[enemy_pos]->reborn = false; // 应视为构造的一部分，不用接口化
-                enemy[enemy_pos]->hp = 1;
-            }
+            process_death(enemy_pos, SIDE_ENEMY);
         }
     }
 }
@@ -551,38 +503,110 @@ void GameState::undo_operation(const operation &op)
     }
 }
 
-void GameState::move_left(int pos, Side side)
+void GameState::process_death(int pos, Side side)
 {
     if (side == SIDE_ALLY)
     {
-        for (int i = pos; i < ally_count; i++)
+        minion &a = *ally[pos];
+        kill_minion(pos, SIDE_ALLY);
+        fill_up(SIDE_ALLY);
+
+        int child_count = a.child_id.size();
+        if (MAX_MINION - ally_count < child_count)
         {
-            move_minion(i + 1, i, SIDE_ALLY);
+            child_count = MAX_MINION - ally_count;
+        }
+
+        if (child_count > 0)
+        {
+            reserve_space(pos, child_count, SIDE_ALLY);
+            for (int i = 0; i < child_count; i++)
+            {
+                create_minion(pos + i, a.child_id[i], SIDE_ALLY);
+            }
+        }
+
+        if (a.reborn && ally_count < MAX_MINION)
+        {
+            reserve_space(pos, 1, SIDE_ALLY);
+            create_minion(pos, a.id, SIDE_ALLY);
+            ally[pos]->reborn = false; // 应视为构造的一部分，不用接口化
+            ally[pos]->hp = 1;
         }
     }
     else if (side == SIDE_ENEMY)
     {
-        for (int i = pos; i < enemy_count; i++)
+        minion &e = *enemy[pos];
+        kill_minion(pos, SIDE_ENEMY);
+        fill_up(SIDE_ENEMY);
+
+        int child_count = e.child_id.size();
+        if (MAX_MINION - enemy_count < child_count)
         {
-            move_minion(i + 1, i, SIDE_ENEMY);
+            child_count = MAX_MINION - enemy_count;
+        }
+
+        if (child_count > 0)
+        {
+            reserve_space(pos, child_count, SIDE_ENEMY);
+            for (int i = 0; i < child_count; i++)
+            {
+                create_minion(pos + i, e.child_id[i], SIDE_ENEMY);
+            }
+        }
+
+        if (e.reborn && enemy_count < MAX_MINION)
+        {
+            reserve_space(pos, 1, SIDE_ENEMY);
+            create_minion(pos, e.id, SIDE_ENEMY);
+            enemy[pos]->reborn = false; // 应视为构造的一部分，不用接口化
+            enemy[pos]->hp = 1;
         }
     }
 }
 
-void GameState::move_right(int pos, Side side, int offset)
+void GameState::fill_up(Side side)
 {
     if (side == SIDE_ALLY)
     {
-        for (int i = ally_count - 1; i >= pos; i--)
+        for (int i = 0; i < ally_count; i++)
         {
-            move_minion(i, i + offset, SIDE_ALLY);
+            if (ally[i] == nullptr)
+            {
+                move_minion(i + 1, i, SIDE_ALLY);
+            }
         }
     }
     else if (side == SIDE_ENEMY)
     {
+        for (int i = 0; i < enemy_count; i++)
+        {
+            if (enemy[i] == nullptr)
+            {
+                move_minion(i + 1, i, SIDE_ENEMY);
+            }
+        }
+    }
+}
+
+void GameState::reserve_space(int pos, int space, Side side)
+{
+    if (side == SIDE_ALLY)
+    {
+        assert(space <= MAX_MINION - ally_count);
+        // -> ally_count+space<=MAX_MINION -> (ally_count-1)+space<MAX_MINION
+        // 把[pos,ally_count)的随从每个都向右移动space格,是不会越界的
+        for (int i = ally_count - 1; i >= pos; i--)
+        {
+            move_minion(i, i + space, SIDE_ALLY);
+        }
+    }
+    else if (side == SIDE_ENEMY)
+    {
+        assert(space <= MAX_MINION - enemy_count);
         for (int i = enemy_count - 1; i >= pos; i--)
         {
-            move_minion(i, i + offset, SIDE_ENEMY);
+            move_minion(i, i + space, SIDE_ENEMY);
         }
     }
 }

@@ -20,10 +20,10 @@ public:
     void attack(int ally_pos, int enemy_pos);
     void undo_last_attack();
 
-    //获取能被攻击的敌方随从列表
+    // 获取能被攻击的敌方随从列表
     std::vector<int> get_enemy();
 
-    //获取能发动攻击的友方随从列表
+    // 获取能发动攻击的友方随从列表
     std::vector<int> get_ally();
 
 private:
@@ -109,11 +109,13 @@ private:
 
     std::stack<std::stack<operation>> op_stack;
 
-    // 把pos右边的所有随从都向左移动1格
-    void move_left(int pos, Side side);
+    void process_death(int pos, Side side);
 
-    // 把pos及右边的随从都向右移动offset格
-    void move_right(int pos, Side side, int offset);
+    // 把列表中的1个空缺填上
+    void fill_up(Side side);
+
+    // 把[pos~pos+space)预留出来
+    void reserve_space(int pos, int space, Side side);
 };
 
 #endif
