@@ -141,46 +141,45 @@ std::vector<int> GameState::get_ally() const
 
 void GameState::print(std::ostream &out) const
 {
-    out<<std::endl;
-    out<<"格式:[id] 攻击力/血量 (攻击次数)";
-    out<<std::endl;
+    out << std::endl;
+    out << "格式:[id] 攻击力/血量 (攻击次数)";
+    out << std::endl;
 
-    out<<"模版:"<<std::endl;
-    for(int i=0;i<minion_template.size();i++)
+    out << "模版:" << std::endl;
+    for (int i = 0; i < minion_template.size(); i++)
     {
         minion_template[i].print(out);
-        out<<std::endl;
+        out << std::endl;
     }
-    out<<std::endl;
-    out<<std::endl;
+    out << std::endl;
+    out << std::endl;
 
-    out<<"敌方:"<<std::endl;
-    for(int i=0;i<enemy_count;i++)
+    out << "敌方:" << std::endl;
+    for (int i = 0; i < enemy_count; i++)
     {
         enemy[i]->print(out);
-        out<<std::endl;
+        out << std::endl;
     }
-    out<<std::endl;
-    out<<std::endl;
+    out << std::endl;
+    out << std::endl;
 
-    out<<"友方:"<<std::endl;
-    for(int i=0;i<ally_count;i++)
+    out << "友方:" << std::endl;
+    for (int i = 0; i < ally_count; i++)
     {
         ally[i]->print(out);
-        out<<std::endl;
+        out << std::endl;
     }
-    out<<std::endl;
-    out<<std::endl;
-    
-    out<<"墓地:"<<std::endl;
-    for(int i=0;i<graveyard.size();i++)
+    out << std::endl;
+    out << std::endl;
+
+    out << "墓地:" << std::endl;
+    for (int i = 0; i < graveyard.size(); i++)
     {
         graveyard[i]->print(out);
-        out<<std::endl;
+        out << std::endl;
     }
-    out<<std::endl;
-    out<<std::endl;
-
+    out << std::endl;
+    out << std::endl;
 }
 
 GameState::minion::minion(int id, int atk, int hp, bool shield,
@@ -202,67 +201,47 @@ GameState::minion::minion(int id, int atk, int hp, bool shield,
 
 void GameState::minion::print(std::ostream &out) const
 {
-    out<<"["<<id<<"] ";
-    out<<atk<<"/"<<hp;
-    out<<" ("<<attack_chance<<")";
-    if(shield)
+    out << "[" << id << "] ";
+    out << atk << "/" << hp;
+    out << " (" << attack_chance << ")";
+    if (shield)
     {
-        out<<" [圣盾]";
+        out << " [圣盾]";
     }
-    if(windfury)
+    if (windfury)
     {
-        out<<" [风怒]";
+        out << " [风怒]";
     }
-    if(charge_or_rush)
+    if (charge_or_rush)
     {
-        out<<" [冲锋/突袭]";
+        out << " [冲锋/突袭]";
     }
-    if(taunt)
+    if (taunt)
     {
-        out<<" [嘲讽]";
+        out << " [嘲讽]";
     }
-    if(poisionous)
+    if (poisionous)
     {
-        out<<" [剧毒]";
+        out << " [剧毒]";
     }
-    if(immune)
+    if (immune)
     {
-        out<<" [免疫]";
+        out << " [免疫]";
     }
-    if(reborn)
+    if (reborn)
     {
-        out<<" [复生]";
+        out << " [复生]";
     }
-    if(child_id.size()>0)
+    if (child_id.size() > 0)
     {
-        out<<" [亡语:";
-        for(int i:child_id)
+        out << " [亡语:";
+        for (int i : child_id)
         {
-            out<<" "<<i;
+            out << " " << i;
         }
-        out<<" ";
-        out<<"]";
+        out << " ";
+        out << "]";
     }
-}
-
-int GameState::get_ally_hp(int pos) const
-{
-    return ally[pos]->hp;
-}
-
-bool GameState::get_ally_shield(int pos) const
-{
-    return ally[pos]->shield;
-}
-
-int GameState::get_enemy_hp(int pos) const
-{
-    return enemy[pos]->hp;
-}
-
-bool GameState::get_enemy_shield(int pos) const
-{
-    return enemy[pos]->shield;
 }
 
 int GameState::parse_minion(std::istream &in)

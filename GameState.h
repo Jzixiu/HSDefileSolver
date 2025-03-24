@@ -30,11 +30,6 @@ public:
 
     void print(std::ostream &out = std::cout) const;
 
-    int get_ally_hp(int pos) const;
-    bool get_ally_shield(int pos) const;
-    int get_enemy_hp(int pos) const;
-    bool get_enemy_shield(int pos)const;
-
 private:
     struct minion
     {
