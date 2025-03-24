@@ -23,12 +23,17 @@ public:
     void undo_last_attack();
 
     // 获取能被攻击的敌方随从列表
-    std::vector<int> get_enemy();
+    std::vector<int> get_enemy() const;
 
     // 获取能发动攻击的友方随从列表
-    std::vector<int> get_ally();
+    std::vector<int> get_ally() const;
 
-    void print(std::ostream &out = std::cout);
+    void print(std::ostream &out = std::cout) const;
+
+    int get_ally_hp(int pos) const;
+    bool get_ally_shield(int pos) const;
+    int get_enemy_hp(int pos) const;
+    bool get_enemy_shield(int pos)const;
 
 private:
     struct minion
@@ -51,7 +56,7 @@ private:
 
         const std::vector<int> child_id;
 
-        void print(std::ostream &out);
+        void print(std::ostream &out) const;
     };
 
     std::vector<minion> minion_template;

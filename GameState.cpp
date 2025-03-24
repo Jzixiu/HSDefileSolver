@@ -100,7 +100,7 @@ void GameState::undo_last_attack()
     op_stack.pop();
 }
 
-std::vector<int> GameState::get_enemy()
+std::vector<int> GameState::get_enemy() const
 {
     std::vector<int> res;
     bool have_taunt = false;
@@ -126,7 +126,7 @@ std::vector<int> GameState::get_enemy()
     return res;
 }
 
-std::vector<int> GameState::get_ally()
+std::vector<int> GameState::get_ally() const
 {
     std::vector<int> res;
     for (int i = 0; i < ally_count; i++)
@@ -139,7 +139,7 @@ std::vector<int> GameState::get_ally()
     return res;
 }
 
-void GameState::print(std::ostream &out)
+void GameState::print(std::ostream &out) const
 {
     out<<std::endl;
     out<<"格式:[id] 攻击力/血量 (攻击次数)";
@@ -200,7 +200,7 @@ GameState::minion::minion(int id, int atk, int hp, bool shield,
     }
 }
 
-void GameState::minion::print(std::ostream &out)
+void GameState::minion::print(std::ostream &out) const
 {
     out<<"["<<id<<"] ";
     out<<atk<<"/"<<hp;
@@ -243,6 +243,26 @@ void GameState::minion::print(std::ostream &out)
         out<<" ";
         out<<"]";
     }
+}
+
+int GameState::get_ally_hp(int pos) const
+{
+    return ally[pos]->hp;
+}
+
+bool GameState::get_ally_shield(int pos) const
+{
+    return ally[pos]->shield;
+}
+
+int GameState::get_enemy_hp(int pos) const
+{
+    return enemy[pos]->hp;
+}
+
+bool GameState::get_enemy_shield(int pos) const
+{
+    return enemy[pos]->shield;
 }
 
 int GameState::parse_minion(std::istream &in)
