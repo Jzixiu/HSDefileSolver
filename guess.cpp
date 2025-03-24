@@ -1,62 +1,130 @@
+#include "Guess.h"
 #include <iostream>
-#include <vector>
+#include <cassert>
+#include <chrono>
 #include <fstream>
-#include <cstring>
 using namespace std;
 
-#define DEBUG
-
-int m;//敌方随从数量
-int n;//友方随从数量
-
-struct minion
+Guess::Guess(string file)
 {
-    int atk;
-    int hp;
-};
+    solution_atk=-1;
 
-struct step
-{
-    int ally_id;
-    int enemy_id;
-};
-
-vector<minion> ally;
-vector<minion> enemy;
-int max_hp=0;
-
-vector<step> steps;
-vector<step> solution;
-int sol_atk=-1;//当前解对应的对方场攻
-
-
-//检查是否是一个解
-void check()
-{
-    int damage;//亵渎造成的伤害
-    int sum_atk=0;//总敌方场攻
-    bool flag[max_hp+1];
-    memset(flag,0,sizeof(flag));
-
-    for(int i=0;i<m;i++)
+    fstream fin(file);
+    if (!fin.is_open())
     {
-        flag[enemy[i].hp]=true;
-    }
-    for(int i=0;i<n;i++)
-    {
-        flag[ally[i].hp]=true;
+        cerr << "Error: cannot open file \"" << file << "\" ." << endl;
     }
 
-    for(int i=1;i<=max_hp;i++)
+    fin >> enemy_count >> ally_count;
+
+    max_hp=0;
+
+    for (int i = 0; i < enemy_count; i++)
     {
-        if(!flag[i])
+        minion &e = enemy.emplace_back();
+        fin >> e.atk;
+        fin >> e.hp;
+        if (e.hp > max_hp)
         {
-            damage=i;
-            break;
+            max_hp = e.hp;
+        }
+        assert((e.atk > 0 && e.hp > 0) && "Violation of: minion.atk>0 && minion.hp>0");
+    }
+
+    for (int i = 0; i < ally_count; i++)
+    {
+        minion &a = ally.emplace_back();
+        fin >> a.atk;
+        fin >> a.hp;
+        if (a.hp > max_hp)
+        {
+            max_hp = a.hp;
+        }
+        assert((a.atk > 0 && a.hp > 0) && "Violation of: minion.atk>0 && minion.hp>0");
+    }
+
+    fin.close();
+}
+
+void Guess::solve()
+{
+    auto start = chrono::high_resolution_clock::now();
+    dfs();
+    auto end = chrono::high_resolution_clock::now();
+    elapsed_time = chrono::duration_cast<chrono::milliseconds>(end - start).count();
+}
+
+int Guess::get_solution_atk()
+{
+    return solution_atk;
+}
+
+vector<Guess::step> Guess::get_solution()
+{
+    return solution;
+}
+
+long long Guess::get_elapsed_time()
+{
+    return elapsed_time;
+}
+
+bool Guess::dfs(int ally_id)
+{
+    if(ally_id==ally_count)
+    {
+        if(check_solution())
+        {
+            return true;
+        }
+        return false;
+    }
+
+    for(int enemy_id=0;enemy_id<=enemy_count;enemy_id++)
+    {
+        if(enemy_id<enemy_count && enemy[enemy_id].hp<=0) continue;
+        if(enemy_id!= enemy_count) //如果id==enemy_count代表不攻击
+        {
+            atk(ally_id,enemy_id);
+        }
+        if(dfs(ally_id+1))
+        {
+            return true;
+        }
+        if(enemy_id!=enemy_count) 
+        {
+            undo_last_attack();
         }
     }
+    return false;
+}
 
-    for(int i=0;i<m;i++)
+bool Guess::check_solution()
+{
+    int damage=1;//亵渎造成的伤害
+    int sum_atk=0;//总敌方场攻
+    bool hp_exists[max_hp+1];
+    for(int i=0;i<=max_hp;i++)
+    {
+        hp_exists[i]=false;
+    }
+
+    for(int i=0;i<enemy_count;i++)
+    {
+        hp_exists[enemy[i].hp]=true;
+    }
+    for(int i=0;i<ally_count;i++)
+    {
+        hp_exists[ally[i].hp]=true;
+    }
+
+    //模拟亵渎
+    while(hp_exists[damage])
+    {
+        damage++;
+    }
+
+    for(int i=0;i<enemy_count;i++)
     {
         if(enemy[i].hp>damage)
         {
@@ -64,14 +132,20 @@ void check()
         }
     }
 
-    if(sum_atk < sol_atk || sol_atk == -1)//更优解
+    if(sum_atk < solution_atk || solution_atk == -1)//更优解
     {
-        sol_atk=sum_atk;
+        solution_atk=sum_atk;
         solution=steps;
+
+        if(solution_atk==0)
+        {
+            return true;
+        }
     }
+    return false;
 }
 
-void atk(int ally_id,int enemy_id)
+void Guess::atk(int ally_id,int enemy_id)
 {
     steps.push_back(step());
     steps.back().ally_id=ally_id;
@@ -80,92 +154,11 @@ void atk(int ally_id,int enemy_id)
     ally[ally_id].hp-=enemy[enemy_id].atk;
 }
 
-void undo_atk()
+Guess::step Guess::undo_last_attack()
 {
     step s=steps.back();
     steps.pop_back();
     enemy[s.enemy_id].hp+=ally[s.ally_id].atk;
     ally[s.ally_id].hp+=enemy[s.enemy_id].atk;
-}
-
-//为第k个友方随从挑选目标
-void f(int ally_id)
-{
-    if(ally_id==n)
-    {
-        check();
-        return;
-    }
-
-    for(int enemy_id=0;enemy_id<=m;enemy_id++)
-    {
-        if(enemy_id<m && enemy[enemy_id].hp<=0) continue;
-        if(enemy_id!=m) atk(ally_id,enemy_id);//如果i==m代表不攻击
-        f(ally_id+1);
-        if(enemy_id!=m) undo_atk();
-    }
-
-}
-
-void init()
-{
-    cout<<"输入敌方随从数量:";
-    cin>>m;
-    cout<<"输入友方随从数量:";
-    cin>>n;
-
-    for(int i=0;i<m;i++)
-    {
-        enemy.push_back(minion());
-        cout<<"输入第["<<i+1<<"]个敌方随从的信息:"<<endl;
-        cout<<"atk:";
-        cin>>enemy.back().atk;
-        cout<<"hp:";
-        cin>>enemy.back().hp;
-        if(enemy.back().hp>max_hp) max_hp=enemy.back().hp;
-    }
-
-    for(int i=0;i<n;i++)
-    {
-        ally.push_back(minion());
-        cout<<"输入第["<<i+1<<"]个友方随从的信息:"<<endl;
-        cout<<"atk:";
-        cin>>ally.back().atk;
-        cout<<"hp:";
-        cin>>ally.back().hp;
-        if(ally.back().hp>max_hp) max_hp=ally.back().hp;
-    }
-}
-
-int main()
-{
-    #ifdef DEBUG
-    ifstream infile("/Users/venoflame/desktop/code/HSDefile/input");
-    ofstream outfile("/Users/venoflame/desktop/code/HSDefile/res_guess");
-    std::ofstream null_stream;
-    streambuf* cinbuf = cin.rdbuf();
-    streambuf* coutbuf = cout.rdbuf();
-    cin.rdbuf(infile.rdbuf());
-    cout.rdbuf(null_stream.rdbuf());
-    #endif
-
-    init();
-
-    f(0);
-
-    cout<<endl<<endl<<"解:敌方最低场攻为"<<sol_atk<<endl;
-    for(step s:solution)
-    {
-        cout<<"友方["<<s.ally_id+1<<"]->敌方["<<s.enemy_id+1<<"]"<<endl;
-    }
-
-    #ifdef DEBUG
-    outfile<<sol_atk;
-    //恢复流指针，防止全局析构出问题
-    cin.rdbuf(cinbuf);
-    cout.rdbuf(coutbuf);
-    infile.close();
-    outfile.close();
-    #endif
-    return 0;
+    return s;
 }
