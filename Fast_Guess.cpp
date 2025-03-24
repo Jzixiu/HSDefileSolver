@@ -1,31 +1,24 @@
-#include "Solver.h"
-#include <chrono>
-#include <iostream>
+#include "Fast_Guess.h"
 using namespace std;
 
-Solver::Solver(GameState &game, bool mode)
-    : gs(game), mode_is_optimal(mode)
+Fast_Guess::Fast_Guess(GameState &game, bool mode)
+    : ISolver(game), mode_is_optimal(mode)
 {
     if (mode_is_optimal)
     {
         minion_exchange_targets = gs.get_minion_exchange_targets();
     }
 
-    solution_atk = -1;
-
-    intermediate_solution_callback=
-    [](int,const std::vector<GameState::step>&)
+    attackers.reserve(gs.get_enemy_count());
+    for (int i = 0; i < gs.get_enemy_count(); i++)
     {
-        //默认回调函数
-    };
+        attackers.emplace_back(CompareByAttack(&gs));
+    }
+
+    sum_of_attackers.resize(gs.get_enemy_count(), 0);
 }
 
-void Solver::set_intermediate_solution_callback(std::function<void(int,const std::vector<GameState::step>)> callback)
-{
-    intermediate_solution_callback=callback;
-}
-
-void Solver::solve()
+void Fast_Guess::solve()
 {
     auto start = chrono::high_resolution_clock::now();
     if (mode_is_optimal)
@@ -40,22 +33,33 @@ void Solver::solve()
     elapsed_time = chrono::duration_cast<chrono::milliseconds>(end - start).count();
 }
 
-int Solver::get_solution_atk()
+Fast_Guess::CompareByAttack::CompareByAttack(const GameState *gs_ptr)
+    : gs_ptr(gs_ptr)
 {
-    return solution_atk;
 }
 
-vector<GameState::step> Solver::get_solution()
+bool Fast_Guess::CompareByAttack::operator()(int left_id, int right_id) const
 {
-    return solution;
+    int left_atk = gs_ptr->get_ally_atk(left_id);
+    int right_atk = gs_ptr->get_ally_atk(right_id);
+    return (left_atk == right_atk) ? (left_id < right_id) : (left_atk < right_atk);
 }
 
-long long Solver::get_elapsed_time()
+void Fast_Guess::attack(int ally_id, int enemy_id)
 {
-    return elapsed_time;
+    gs.attack(step(ally_id, enemy_id));
+    attackers[enemy_id].insert(ally_id);
+    sum_of_attackers[enemy_id] += gs.get_ally_atk(ally_id);
 }
 
-bool Solver::minion_exchange(int ally_id)
+void Fast_Guess::undo_last_attack()
+{
+    step s = gs.undo_last_attack();
+    attackers[s.enemy_id].erase(s.ally_id);
+    sum_of_attackers[s.enemy_id] -= gs.get_ally_atk(s.ally_id);
+}
+
+bool Fast_Guess::minion_exchange(int ally_id)
 {
     if (ally_id == gs.get_ally_count())
     {
@@ -72,18 +76,18 @@ bool Solver::minion_exchange(int ally_id)
         } // 这个随从不进行互换的情况
         for (int enemy_id : minion_exchange_targets[ally_id])
         {
-            gs.attack(GameState::step(ally_id, enemy_id));
+            attack(ally_id, enemy_id);
             if (minion_exchange(ally_id + 1))
             {
                 return true;
             }
-            gs.undo_last_attack();
+            undo_last_attack();
         }
     }
     return false;
 }
 
-bool Solver::dfs(int hp_level)
+bool Fast_Guess::dfs(int hp_level)
 {
     bool leaf = true; // 记录是否为叶子节点，仅在叶子节点结算
 
@@ -96,9 +100,18 @@ bool Solver::dfs(int hp_level)
         const vector<int> &ally_of_hp = gs.get_ally_of_hp(hp_level);
         for (int ally_id : ally_of_hp)
         {
+            if(gs.getlock_ally(ally_id))
+            {
+                continue;
+            }
+            
             leaf = false; // 如果进入了某个分支则不是叶子节点
 
             gs.setlock_ally(ally_id, true);
+            if (dfs(hp_level))
+            {
+                return true;
+            }
             if (dfs(hp_level + 1))
             {
                 return true;
@@ -122,21 +135,36 @@ bool Solver::dfs(int hp_level)
             const vector<int> &enemy_of_atk = gs.get_enemy_of_atk(diff);
             for (int enemy_id : enemy_of_atk)
             {
-                if (gs.getlock_enemy(enemy_id) || gs.get_enemy_hp(enemy_id) <= 0)
+                if (gs.getlock_enemy(enemy_id))
                 {
-                    // 如果这个敌方随从已被锁定或死亡，则跳过
+                    // 如果这个敌方随从已被锁定则跳过
                     continue;
                 }
-                leaf = false;
 
-                gs.attack(GameState::step(ally_id, enemy_id));
+                if (gs.get_enemy_hp(enemy_id) <= 0)
+                {
+                    int unleathal_damage = sum_of_attackers[enemy_id];
+                    unleathal_damage -= gs.get_ally_atk(*attackers[enemy_id].rbegin());
+                    unleathal_damage += gs.get_ally_atk(ally_id);
+                    if (unleathal_damage >= gs.get_enemy_full_hp(enemy_id))
+                    {
+                        continue;
+                    }
+                }
+
+                leaf = false;
+                attack(ally_id, enemy_id);
                 gs.setlock_ally(ally_id, true);
+                if (dfs(hp_level))
+                {
+                    return true;
+                }
                 if (dfs(hp_level + 1))
                 {
                     return true;
                 }
                 gs.setlock_ally(ally_id, false);
-                gs.undo_last_attack();
+                undo_last_attack();
             }
         }
     }
@@ -150,9 +178,18 @@ bool Solver::dfs(int hp_level)
         const vector<int> &enemy_of_hp = gs.get_enemy_of_hp(hp_level);
         for (int enemy_id : enemy_of_hp)
         {
+            if(gs.getlock_enemy(enemy_id))
+            {
+                continue;
+            }
+
             leaf = false;
 
             gs.setlock_enemy(enemy_id, true);
+            if (dfs(hp_level))
+            {
+                return true;
+            }
             if (dfs(hp_level + 1))
             {
                 return true;
@@ -179,9 +216,13 @@ bool Solver::dfs(int hp_level)
 
                 for (int ally_id : combo)
                 {
-                    gs.attack(GameState::step(ally_id, enemy_id));
+                    attack(ally_id, enemy_id);
                 }
                 gs.setlock_enemy(enemy_id, true);
+                if (dfs(hp_level))
+                {
+                    return true;
+                }
                 if (dfs(hp_level + 1))
                 {
                     return true;
@@ -189,7 +230,7 @@ bool Solver::dfs(int hp_level)
                 gs.setlock_enemy(enemy_id, false);
                 for (int i = 0; i < combo.size(); i++)
                 {
-                    gs.undo_last_attack();
+                    undo_last_attack();
                 }
             }
         }
@@ -210,7 +251,7 @@ bool Solver::dfs(int hp_level)
     return false;
 }
 
-bool Solver::check_solution(int damage)
+bool Fast_Guess::check_solution(int damage)
 {
     int enemy_sum_atk = 0;
     for (int id = 0; id < gs.get_enemy_count(); id++)
@@ -224,7 +265,15 @@ bool Solver::check_solution(int damage)
     if (enemy_sum_atk < solution_atk || solution_atk == -1)
     {
         solution_atk = enemy_sum_atk;
-        solution = gs.get_current_step_history();
+        vector<step> s;
+        for (int enemy_id = 0; enemy_id < gs.get_enemy_count(); enemy_id++)
+        {
+            for (int ally_id : attackers[enemy_id])
+            {
+                s.push_back(step(ally_id, enemy_id));
+            }
+        }
+        solution = s;
 
         if (solution_atk == 0)
         {
@@ -232,7 +281,7 @@ bool Solver::check_solution(int damage)
         }
         else
         {
-            intermediate_solution_callback(solution_atk,solution);
+            incumbent_callback(solution_atk, solution);
         }
     }
     return false;

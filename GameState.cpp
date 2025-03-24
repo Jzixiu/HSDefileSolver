@@ -4,8 +4,6 @@
 #include <fstream>
 using namespace std;
 
-// public:
-
 GameState::GameState()
 {
     int m, n;
@@ -31,6 +29,9 @@ GameState::GameState()
         {
             max_hp_enemy = e.hp;
         }
+
+        enemy_full_hp.push_back(e.hp);
+
         assert((e.atk > 0 && e.hp > 0) && "Violation of: minion.atk>0 && minion.hp>0");
     }
 
@@ -93,6 +94,9 @@ GameState::GameState(string file)
         {
             max_hp_enemy = e.hp;
         }
+
+        enemy_full_hp.push_back(e.hp);
+
         assert((e.atk > 0 && e.hp > 0) && "Violation of: minion.atk>0 && minion.hp>0");
     }
 
@@ -133,52 +137,52 @@ GameState::~GameState()
     delete[] is_hp_enemy;
 }
 
-GameState::step::step() = default;
-
-GameState::step::step(int ally_id, int enemy_id)
-    : ally_id(ally_id), enemy_id(enemy_id) {}
-
-int GameState::get_ally_count()
+int GameState::get_ally_count() const
 {
     return ally.size();
 }
 
-int GameState::get_enemy_count()
+int GameState::get_enemy_count() const
 {
     return enemy.size();
 }
 
-vector<GameState::step> GameState::get_current_step_history()
+vector<step> GameState::get_current_step_history() const
 {
     return step_history;
 }
 
-int GameState::get_ally_atk(int id)
+int GameState::get_ally_atk(int id) const
 {
     return ally[id].atk;
 }
 
-int GameState::get_enemy_atk(int id)
+int GameState::get_enemy_atk(int id) const
 {
     return enemy[id].atk;
 }
 
-int GameState::get_ally_hp(int id)
+int GameState::get_ally_hp(int id) const
 {
     return ally[id].hp;
 }
 
-int GameState::get_enemy_hp(int id)
+int GameState::get_enemy_hp(int id) const
 {
     return enemy[id].hp;
 }
 
-bool GameState::getlock_ally(int id)
+int GameState::get_enemy_full_hp(int id) const
+{
+    return enemy_full_hp[id];
+}
+
+bool GameState::getlock_ally(int id) const
 {
     return ally[id].locked;
 }
 
-bool GameState::getlock_enemy(int id)
+bool GameState::getlock_enemy(int id) const
 {
     return enemy[id].locked;
 }
@@ -193,12 +197,12 @@ void GameState::setlock_enemy(int id, bool locked)
     enemy[id].locked = locked;
 }
 
-bool GameState::get_can_attack(int id)
+bool GameState::get_can_attack(int id) const
 {
     return ally[id].can_attack;
 }
 
-std::vector<std::vector<int>> GameState::get_minion_exchange_targets()
+std::vector<std::vector<int>> GameState::get_minion_exchange_targets() const
 {
     assert(step_history.size() == 0 && "Violation of: step_history.size()==0");
 
@@ -219,7 +223,7 @@ std::vector<std::vector<int>> GameState::get_minion_exchange_targets()
     return res;
 }
 
-vector<int> GameState::get_ally_of_hp(int hp)
+vector<int> GameState::get_ally_of_hp(int hp) const
 {
     assert((0 < hp) && (hp <= max_hp_ally) && "Violation of: (0<hp<=max_hp_ally)");
 
@@ -234,7 +238,7 @@ vector<int> GameState::get_ally_of_hp(int hp)
     return snapshot;
 }
 
-vector<int> GameState::get_enemy_of_hp(int hp)
+vector<int> GameState::get_enemy_of_hp(int hp) const
 {
     assert((0 < hp) && (hp <= max_hp_enemy) && "Violation of: (0<hp<=max_hp_enemy)");
 
@@ -249,7 +253,7 @@ vector<int> GameState::get_enemy_of_hp(int hp)
     return snapshot;
 }
 
-vector<int> GameState::get_ally_gt_hp(int hp)
+vector<int> GameState::get_ally_gt_hp(int hp) const
 {
     assert((0 < hp) && (hp <= max_hp_ally) && "Violation of: (0<hp<=max_hp_ally)");
 
@@ -264,7 +268,7 @@ vector<int> GameState::get_ally_gt_hp(int hp)
     return res;
 }
 
-vector<int> GameState::get_enemy_of_atk(int attack)
+vector<int> GameState::get_enemy_of_atk(int attack) const
 {
     vector<int> vec;
     for (int enemy_id = 0; enemy_id < get_enemy_count(); enemy_id++)
@@ -277,7 +281,7 @@ vector<int> GameState::get_enemy_of_atk(int attack)
     return vec;
 }
 
-vector<int> GameState::get_enemy_gt_hp(int hp)
+vector<int> GameState::get_enemy_gt_hp(int hp) const
 {
     assert((0 < hp) && (hp <= max_hp_enemy) && "Violation of: (0<hp<=max_hp_enemy)");
     vector<int> res;
@@ -291,7 +295,7 @@ vector<int> GameState::get_enemy_gt_hp(int hp)
     return res;
 }
 
-vector<vector<int>> GameState::get_combo_of_atk(int damage)
+vector<vector<int>> GameState::get_combo_of_atk(int damage) const
 {
     vector<int> avaliable_ally;
     for (int id = 0; id < get_ally_count(); id++)
@@ -335,7 +339,7 @@ void GameState::attack(step s)
     ally[s.ally_id].can_attack = false;
 }
 
-GameState::step GameState::undo_last_attack()
+step GameState::undo_last_attack()
 {
     assert((step_history.size() > 0) && "Violation of: step_history.size>0");
 
@@ -351,23 +355,31 @@ GameState::step GameState::undo_last_attack()
 
 void GameState::undo_all()
 {
-    while(step_history.size()>0)
+    while(step_history.size())
     {
         undo_last_attack();
     }
+    for(int ally_id=0;ally_id<get_ally_count();ally_id++)
+    {
+        setlock_ally(ally_id,false);
+    }
+    for(int enemy_id=0;enemy_id<get_enemy_count();enemy_id++)
+    {
+        setlock_enemy(enemy_id,false);
+    }
 }
 
-void GameState::print_ally(int id)
+void GameState::print_ally(int id) const
 {
     cout << id << ":(" << ally[id].atk << "/" << ally[id].hp << ") ";
 }
 
-void GameState::print_enemy(int id)
+void GameState::print_enemy(int id) const
 {
     cout << id << ":(" << enemy[id].atk << "/" << enemy[id].hp << ") ";
 }
 
-void GameState::print_state()
+void GameState::print_state() const
 {
     cout << endl;
 
@@ -445,8 +457,6 @@ void GameState::print_state()
 
     cout << endl;
 }
-
-// private:
 
 int GameState::move_hp_ally(int id, int new_hp)
 {

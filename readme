@@ -1,3 +1,0 @@
-此版本无法正确处理攻击时序，会漏枚举时序重要的情况;
-Solve和Guess都无法正确处理。
-例:sample_input/order_correctness.
