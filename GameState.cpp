@@ -88,7 +88,7 @@ void GameState::attack(int ally_pos, int enemy_pos)
     }
 }
 
-void GameState::undo_last_attack()
+void GameState::undo()
 {
     assert(op_stack.size() > 0);
     std::stack<operation> &ops = op_stack.top();
@@ -242,6 +242,66 @@ void GameState::minion::print(std::ostream &out) const
         out << " ";
         out << "]";
     }
+}
+
+int GameState::get_enemy_atk_after_Defile()
+{
+    op_stack.push({});
+
+    bool some_minion_died;
+    do
+    {
+        some_minion_died = false;
+        for (int pos = 0; pos < ally_count; pos++)
+        {
+            modify_minion_hp(pos, SIDE_ALLY, ally[pos]->hp - 1);
+        }
+        for (int pos = 0; pos < enemy_count; pos++)
+        {
+            modify_minion_hp(pos, SIDE_ENEMY, enemy[pos]->hp - 1);
+        }
+
+        bool process_completed = true; // 结算是否完成
+        do
+        {
+            for (int pos = 0; pos < ally_count; pos++)
+            {
+                if (ally[pos]->hp <= 0)
+                {
+                    some_minion_died = true;
+                    process_completed = false;
+                    process_death(pos, SIDE_ALLY);
+                    break;
+                }
+            }
+        } while (!process_completed);
+
+        process_completed = true;
+        do
+        {
+            for (int pos = 0; pos < enemy_count; pos++)
+            {
+                if (enemy[pos]->hp <= 0)
+                {
+                    some_minion_died = true;
+                    process_completed = false;
+                    process_death(pos, SIDE_ENEMY);
+                    break;
+                }
+            }
+        } while (!process_completed);
+
+    } while (some_minion_died);
+
+    int sum_atk = 0;
+    for (int pos = 0; pos < enemy_count; pos++)
+    {
+        sum_atk += enemy[pos]->atk;
+    }
+
+    undo();
+
+    return sum_atk;
 }
 
 int GameState::parse_minion(std::istream &in)

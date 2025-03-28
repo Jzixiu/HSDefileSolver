@@ -20,15 +20,17 @@ public:
     GameState(std::istream &in);
 
     void attack(int ally_pos, int enemy_pos);
-    void undo_last_attack();
+    void undo();
 
-    // 获取能被攻击的敌方随从列表
+    // 获取能被攻击的敌方随从的位置列表
     std::vector<int> get_enemy() const;
 
-    // 获取能发动攻击的友方随从列表
+    // 获取能发动攻击的友方随从的位置列表
     std::vector<int> get_ally() const;
 
     void print(std::ostream &out = std::cout) const;
+
+    int get_enemy_atk_after_Defile();
 
 private:
     struct minion
