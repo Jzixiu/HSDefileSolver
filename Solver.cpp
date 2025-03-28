@@ -37,11 +37,11 @@ std::vector<Solver::step> Solver::get_solution() const
 void Solver::attack(int ally_pos, int enemy_pos)
 {
     step s;
-    s.ally_pos=ally_pos;
-    s.enemy_pos=enemy_pos;
+    s.ally_pos = ally_pos;
+    s.enemy_pos = enemy_pos;
     steps.push_back(s);
 
-    gs.attack(ally_pos,enemy_pos);
+    gs.attack(ally_pos, enemy_pos);
 }
 
 void Solver::undo()
@@ -79,15 +79,16 @@ bool Solver::dfs()
 
 bool Solver::check_solution()
 {
-    int atk=gs.get_enemy_atk_after_Defile();
-    if(atk<solution_atk || solution_atk==-1)
+    int atk = gs.get_enemy_atk_after_Defile();
+    if (atk < solution_atk || solution_atk == -1)
     {
-        //有更优解
-        solution_atk=atk;
-        solution=steps;
-        if(atk==0)
+        // 有更优解
+        solution_atk = atk;
+        solution = steps;
+        incumbent_callback(solution_atk, solution);
+        if (atk == 0)
         {
-            //有最优解
+            // 有最优解
             return true;
         }
     }
