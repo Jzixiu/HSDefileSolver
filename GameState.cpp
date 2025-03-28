@@ -264,6 +264,7 @@ int GameState::get_enemy_atk_after_Defile()
         bool process_completed = true; // 结算是否完成
         do
         {
+            process_completed = true;
             for (int pos = 0; pos < ally_count; pos++)
             {
                 if (ally[pos]->hp <= 0)
@@ -279,6 +280,7 @@ int GameState::get_enemy_atk_after_Defile()
         process_completed = true;
         do
         {
+            process_completed = true;
             for (int pos = 0; pos < enemy_count; pos++)
             {
                 if (enemy[pos]->hp <= 0)
