@@ -6,6 +6,7 @@
 
 GameState::GameState(std::istream &in)
 {
+    int enemy_count, ally_count;
     in >> enemy_count >> ally_count;
 
     assert(0 <= enemy_count && enemy_count <= MAX_MINION);
@@ -23,13 +24,13 @@ GameState::GameState(std::istream &in)
     for (int i = 0; i < enemy_count; i++)
     {
         int id = parse_minion(in);
-        enemy[i] = std::make_unique<minion>(minion_template[id]);
+        enemy.push_back(std::make_unique<minion>(minion_template[id]));
     }
 
     for (int i = 0; i < ally_count; i++)
     {
         int id = parse_minion(in);
-        ally[i] = std::make_unique<minion>(minion_template[id]);
+        ally.push_back(std::make_unique<minion>(minion_template[id]));
         if (initial_attack_chance[i] != -1)
         {
             ally[i]->attack_chance = initial_attack_chance[i];
@@ -39,6 +40,7 @@ GameState::GameState(std::istream &in)
 
 void GameState::attack(int ally_pos, int enemy_pos)
 {
+    assert(ally_pos < ally.size() && enemy_pos < enemy.size());
     assert(ally[ally_pos] != nullptr && enemy[enemy_pos] != nullptr);
     assert(ally[ally_pos]->attack_chance > 0 && ally[ally_pos]->atk > 0);
 
@@ -47,7 +49,7 @@ void GameState::attack(int ally_pos, int enemy_pos)
     const minion &a = *ally[ally_pos];
     const minion &e = *enemy[enemy_pos];
 
-    modify_minion_attack_chance(ally_pos, SIDE_ALLY, a.attack_chance - 1);
+    decrement_minion_attack_chance(ally_pos, SIDE_ALLY);
 
     // 处理友方随从
 
@@ -55,7 +57,7 @@ void GameState::attack(int ally_pos, int enemy_pos)
     {
         if (a.shield)
         {
-            modify_minion_shield(ally_pos, SIDE_ALLY, false);
+            remove_minion_shield(ally_pos, SIDE_ALLY);
         }
         else
         {
@@ -74,7 +76,7 @@ void GameState::attack(int ally_pos, int enemy_pos)
     {
         if (e.shield)
         {
-            modify_minion_shield(enemy_pos, SIDE_ENEMY, false);
+            remove_minion_shield(enemy_pos, SIDE_ENEMY);
         }
         else
         {
@@ -104,7 +106,7 @@ std::vector<int> GameState::get_enemy() const
 {
     std::vector<int> res;
     bool have_taunt = false;
-    for (int i = 0; i < enemy_count; i++)
+    for (int i = 0; i < enemy.size(); i++)
     {
         if (!have_taunt)
         {
@@ -129,7 +131,7 @@ std::vector<int> GameState::get_enemy() const
 std::vector<int> GameState::get_ally() const
 {
     std::vector<int> res;
-    for (int i = 0; i < ally_count; i++)
+    for (int i = 0; i < ally.size(); i++)
     {
         if (ally[i]->attack_chance > 0)
         {
@@ -155,7 +157,7 @@ void GameState::print(std::ostream &out) const
     out << std::endl;
 
     out << "敌方:" << std::endl;
-    for (int i = 0; i < enemy_count; i++)
+    for (int i = 0; i < enemy.size(); i++)
     {
         enemy[i]->print(out);
         out << std::endl;
@@ -164,7 +166,7 @@ void GameState::print(std::ostream &out) const
     out << std::endl;
 
     out << "友方:" << std::endl;
-    for (int i = 0; i < ally_count; i++)
+    for (int i = 0; i < ally.size(); i++)
     {
         ally[i]->print(out);
         out << std::endl;
@@ -182,12 +184,16 @@ void GameState::print(std::ostream &out) const
     out << std::endl;
 }
 
+int GameState::get_enemy_atk_after_Defile()
+{
+}
+
 GameState::minion::minion(int id, int atk, int hp, bool shield,
                           bool windfury, bool charge_or_rush, bool taunt, bool poisionous,
-                          bool immune, bool reborn, std::vector<int> child)
+                          bool immune, bool reborn, std::vector<int> derivant_id)
     : id(id), atk(atk), hp(hp), shield(shield),
       windfury(windfury), charge_or_rush(charge_or_rush), taunt(taunt), poisionous(poisionous),
-      immune(immune), reborn(reborn), child_id(std::move(child))
+      immune(immune), reborn(reborn), derivant_id(std::move(derivant_id))
 {
     if (charge_or_rush && atk > 0)
     {
@@ -232,10 +238,10 @@ void GameState::minion::print(std::ostream &out) const
     {
         out << " [复生]";
     }
-    if (child_id.size() > 0)
+    if (derivant_id.size() > 0)
     {
         out << " [亡语:";
-        for (int i : child_id)
+        for (int i : derivant_id)
         {
             out << " " << i;
         }
@@ -244,66 +250,58 @@ void GameState::minion::print(std::ostream &out) const
     }
 }
 
-int GameState::get_enemy_atk_after_Defile()
+GameState::operation::operation()
 {
-    op_stack.push({});
+    type = OP_UNDEFINED;
+    side = SIDE_UNDEFINED;
+    pos = -1;
+    old_hp = -1;
+}
 
-    bool some_minion_died;
-    do
+int GameState::get_id(int atk, int hp, bool shield,
+                      bool windfury, bool charge_or_rush, bool taunt, bool poisionous,
+                      bool immune, bool reborn, std::vector<int> derivant_id)
+{
+    int id = 0;
+    bool repeated = false;
+    while (id < minion_template.size())
     {
-        some_minion_died = false;
-        for (int pos = 0; pos < ally_count; pos++)
+        if (
+            minion_template[id].atk == atk &&
+            minion_template[id].hp == hp &&
+            minion_template[id].shield == shield &&
+            minion_template[id].windfury == windfury &&
+            minion_template[id].charge_or_rush == charge_or_rush &&
+            minion_template[id].taunt == taunt &&
+            minion_template[id].poisionous == poisionous &&
+            minion_template[id].immune == immune &&
+            minion_template[id].reborn == reborn &&
+            minion_template[id].derivant_id == derivant_id)
         {
-            modify_minion_hp(pos, SIDE_ALLY, ally[pos]->hp - 1);
+            repeated = true;
+            break;
         }
-        for (int pos = 0; pos < enemy_count; pos++)
-        {
-            modify_minion_hp(pos, SIDE_ENEMY, enemy[pos]->hp - 1);
-        }
-
-        bool process_completed = true; // 结算是否完成
-        do
-        {
-            process_completed = true;
-            for (int pos = 0; pos < ally_count; pos++)
-            {
-                if (ally[pos]->hp <= 0)
-                {
-                    some_minion_died = true;
-                    process_completed = false;
-                    process_death(pos, SIDE_ALLY);
-                    break;
-                }
-            }
-        } while (!process_completed);
-
-        process_completed = true;
-        do
-        {
-            process_completed = true;
-            for (int pos = 0; pos < enemy_count; pos++)
-            {
-                if (enemy[pos]->hp <= 0)
-                {
-                    some_minion_died = true;
-                    process_completed = false;
-                    process_death(pos, SIDE_ENEMY);
-                    break;
-                }
-            }
-        } while (!process_completed);
-
-    } while (some_minion_died);
-
-    int sum_atk = 0;
-    for (int pos = 0; pos < enemy_count; pos++)
-    {
-        sum_atk += enemy[pos]->atk;
+        id++;
     }
 
-    undo();
+    if (!repeated)
+    {
+        id = minion_template.size();
+        minion_template.emplace_back(
+            id,
+            atk,
+            hp,
+            shield,
+            windfury,
+            charge_or_rush,
+            taunt,
+            poisionous,
+            immune,
+            reborn,
+            derivant_id);
+    }
 
-    return sum_atk;
+    return id;
 }
 
 int GameState::parse_minion(std::istream &in)
@@ -364,65 +362,30 @@ int GameState::parse_minion(std::istream &in)
         }
     }
 
-    std::vector<int> child_id;
+    std::vector<int> derivant_id;
 
     for (int i = 0; i < child_count; i++)
     {
-        child_id.push_back(parse_minion(in));
+        derivant_id.push_back(parse_minion(in));
     }
 
-    int id = 0;
-    bool repeated = false;
-    while (id < minion_template.size())
+    if (reborn)
     {
-        if (
-            minion_template[id].atk == atk &&
-            minion_template[id].hp == hp &&
-            minion_template[id].shield == shield &&
-            minion_template[id].windfury == windfury &&
-            minion_template[id].charge_or_rush == charge_or_rush &&
-            minion_template[id].taunt == taunt &&
-            minion_template[id].poisionous == poisionous &&
-            minion_template[id].immune == immune &&
-            minion_template[id].reborn == reborn &&
-            minion_template[id].child_id == child_id)
-        {
-            repeated = true;
-            break;
-        }
-        id++;
-    }
-
-    if (!repeated)
-    {
-        id = minion_template.size();
-        minion_template.emplace_back(
-            id,
+        int reborn_id = get_id(
             atk,
-            hp,
+            1, // 1血
             shield,
             windfury,
             charge_or_rush,
             taunt,
             poisionous,
             immune,
-            reborn,
-            child_id);
+            false,                        // 无复生
+            derivant_id);                 // 此时derivant_id里只有亡语衍生物，还没有它本身
+        derivant_id.push_back(reborn_id); // 然后把这个复生衍生物插入本体的衍生物里（最后）
     }
 
-    return id;
-}
-
-GameState::operation::operation()
-{
-    type = OP_UNDEFINED;
-    side = SIDE_UNDEFINED;
-    pos = -1;
-    old_hp = -1;
-    attack_chance = -1;
-    shield = false;
-    from_pos = -1;
-    to_pos = -1;
+    return get_id(atk, hp, shield, windfury, charge_or_rush, taunt, poisionous, immune, reborn, derivant_id);
 }
 
 void GameState::create_minion(int pos, int id, Side side)
@@ -435,15 +398,13 @@ void GameState::create_minion(int pos, int id, Side side)
 
     if (side == SIDE_ALLY)
     {
-        assert(ally[pos] == nullptr);
-        ally[pos] = std::make_unique<minion>(minion_template[id]);
-        ally_count++;
+        assert(0 <= pos && pos <= ally.size());
+        ally.insert(ally.begin() + pos, std::make_unique<minion>(minion_template[id]));
     }
     else if (side == SIDE_ENEMY)
     {
-        assert(enemy[pos] == nullptr);
-        enemy[pos] = std::make_unique<minion>(minion_template[id]);
-        enemy_count++;
+        assert(0 <= pos && pos <= enemy.size());
+        enemy.insert(enemy.begin() + pos, std::make_unique<minion>(minion_template[id]));
     }
 }
 
@@ -457,40 +418,17 @@ void GameState::kill_minion(int pos, Side side)
 
     if (side == SIDE_ALLY)
     {
+        assert(0 <= pos && pos < ally.size());
         assert(ally[pos] != nullptr);
         graveyard.push_back(std::move(ally[pos]));
-        ally_count--;
+        ally.erase(ally.begin() + pos);
     }
     else if (side == SIDE_ENEMY)
     {
+        assert(0 <= pos && pos < enemy.size());
         assert(enemy[pos] != nullptr);
         graveyard.push_back(std::move(enemy[pos]));
-        enemy_count--;
-    }
-}
-
-void GameState::move_minion(int from, int to, Side side)
-{
-    assert(0 <= from && from < MAX_MINION && 0 <= to && to < MAX_MINION);
-
-    op_stack.top().emplace();
-    operation &op = op_stack.top().top();
-    op.type = OP_MOVE;
-    op.side = side;
-    op.from_pos = from;
-    op.to_pos = to;
-
-    if (side == SIDE_ALLY)
-    {
-        assert(ally[from] != nullptr);
-        assert(ally[to] == nullptr);
-        ally[to] = std::move(ally[from]);
-    }
-    else if (side == SIDE_ENEMY)
-    {
-        assert(enemy[from] != nullptr);
-        assert(enemy[to] == nullptr);
-        enemy[to] = std::move(enemy[from]);
+        enemy.erase(enemy.begin() + pos);
     }
 }
 
@@ -504,59 +442,61 @@ void GameState::modify_minion_hp(int pos, Side side, int new_val)
 
     if (side == SIDE_ALLY)
     {
+        assert(0 <= pos && pos < ally.size());
         assert(ally[pos] != nullptr);
         op.old_hp = ally[pos]->hp;
         ally[pos]->hp = new_val;
     }
     else if (side == SIDE_ENEMY)
     {
+        assert(0 <= pos && pos < enemy.size());
         assert(enemy[pos] != nullptr);
         op.old_hp = enemy[pos]->hp;
         enemy[pos]->hp = new_val;
     }
 }
 
-void GameState::modify_minion_attack_chance(int pos, Side side, int new_val)
+void GameState::decrement_minion_attack_chance(int pos, Side side)
 {
     op_stack.top().emplace();
     operation &op = op_stack.top().top();
-    op.type = OP_MODIFY_ATTACK_CHANCE;
+    op.type = OP_DECREMENT_ATTACK_CHANCE;
     op.side = side;
     op.pos = pos;
 
     if (side == SIDE_ALLY)
     {
+        assert(0 <= pos && pos < ally.size());
         assert(ally[pos] != nullptr);
-        op.attack_chance = ally[pos]->attack_chance;
-        ally[pos]->attack_chance = new_val;
+        ally[pos]->attack_chance--;
     }
     else if (side == SIDE_ENEMY)
     {
+        assert(0 <= pos && pos < enemy.size());
         assert(enemy[pos] != nullptr);
-        op.attack_chance = enemy[pos]->attack_chance;
-        enemy[pos]->attack_chance = new_val;
+        enemy[pos]->attack_chance--;
     }
 }
 
-void GameState::modify_minion_shield(int pos, Side side, bool new_val)
+void GameState::remove_minion_shield(int pos, Side side)
 {
     op_stack.top().emplace();
     operation &op = op_stack.top().top();
-    op.type = OP_MODIFY_SHIELD;
+    op.type = OP_REMOVE_SHIELD;
     op.side = side;
     op.pos = pos;
 
     if (side == SIDE_ALLY)
     {
+        assert(0 <= pos && pos < ally.size());
         assert(ally[pos] != nullptr);
-        op.shield = ally[pos]->shield;
-        ally[pos]->shield = new_val;
+        ally[pos]->shield = false;
     }
     else if (side == SIDE_ENEMY)
     {
+        assert(0 <= pos && pos < enemy.size());
         assert(enemy[pos] != nullptr);
-        op.shield = enemy[pos]->shield;
-        enemy[pos]->shield = new_val;
+        enemy[pos]->shield = false;
     }
 }
 
@@ -568,83 +508,60 @@ void GameState::undo_operation(const operation &op)
         if (op.side == SIDE_ALLY)
         {
             ally[op.pos].reset();
-            ally_count--;
+            ally.erase(ally.begin() + op.pos);
         }
         else if (op.side == SIDE_ENEMY)
         {
             enemy[op.pos].reset();
-            enemy_count--;
+            enemy.erase(enemy.begin() + op.pos);
         }
         break;
 
     case OP_KILL:
-        assert(graveyard.size() != 0);
         if (op.side == SIDE_ALLY)
         {
-            ally[op.pos] = std::move(graveyard.back());
-            ally_count++;
+            ally.insert(ally.begin() + op.pos, std::move(graveyard.back()));
             graveyard.pop_back();
         }
         else if (op.side == SIDE_ENEMY)
         {
-            enemy[op.pos] = std::move(graveyard.back());
-            enemy_count++;
+            enemy.insert(enemy.begin() + op.pos, std::move(graveyard.back()));
             graveyard.pop_back();
         }
-        break;
-
-    case OP_MOVE:
-        if (op.side == SIDE_ALLY)
-        {
-            assert(ally[op.from_pos] == nullptr);
-            assert(ally[op.to_pos] != nullptr);
-            ally[op.from_pos] = std::move(ally[op.to_pos]);
-        }
-        else if (op.side == SIDE_ENEMY)
-        {
-            assert(enemy[op.from_pos] == nullptr);
-            assert(enemy[op.to_pos] != nullptr);
-            enemy[op.from_pos] = std::move(enemy[op.to_pos]);
-        }
-
         break;
 
     case OP_MODIFY_HP:
         if (op.side == SIDE_ALLY)
         {
-            assert(ally[op.pos] != nullptr);
             ally[op.pos]->hp = op.old_hp;
         }
         else if (op.side == SIDE_ENEMY)
         {
-            assert(enemy[op.pos] != nullptr);
             enemy[op.pos]->hp = op.old_hp;
         }
         break;
 
-    case OP_MODIFY_ATTACK_CHANCE:
+    case OP_DECREMENT_ATTACK_CHANCE:
         if (op.side == SIDE_ALLY)
         {
-            assert(ally[op.pos] != nullptr);
-            ally[op.pos]->attack_chance = op.attack_chance;
+            ally[op.pos]->attack_chance++;
         }
         else if (op.side == SIDE_ENEMY)
         {
-            assert(enemy[op.pos] != nullptr);
-            enemy[op.pos]->attack_chance = op.attack_chance;
+            enemy[op.pos]->attack_chance++;
         }
         break;
 
-    case OP_MODIFY_SHIELD:
+    case OP_REMOVE_SHIELD:
         if (op.side == SIDE_ALLY)
         {
             assert(ally[op.pos] != nullptr);
-            ally[op.pos]->shield = op.shield;
+            ally[op.pos]->shield = true;
         }
         else if (op.side == SIDE_ENEMY)
         {
             assert(enemy[op.pos] != nullptr);
-            enemy[op.pos]->shield = op.shield;
+            enemy[op.pos]->shield = true;
         }
         break;
 
@@ -659,104 +576,34 @@ void GameState::process_death(int pos, Side side)
     {
         minion &a = *ally[pos];
         kill_minion(pos, SIDE_ALLY);
-        fill_up(SIDE_ALLY);
 
-        int child_count = a.child_id.size();
-        if (MAX_MINION - ally_count < child_count)
+        int child_count = a.derivant_id.size();
+        int avaliable_space = MAX_MINION - ally.size();
+        if (avaliable_space < child_count)
         {
-            child_count = MAX_MINION - ally_count;
+            child_count = avaliable_space;
         }
 
-        if (child_count > 0)
+        for (int i = 0; i < child_count; i++)
         {
-            reserve_space(pos, child_count, SIDE_ALLY);
-            for (int i = 0; i < child_count; i++)
-            {
-                create_minion(pos + i, a.child_id[i], SIDE_ALLY);
-            }
-        }
-
-        if (a.reborn && ally_count < MAX_MINION)
-        {
-            reserve_space(pos, 1, SIDE_ALLY);
-            create_minion(pos, a.id, SIDE_ALLY);
-            ally[pos]->reborn = false; // 应视为构造的一部分，不用接口化
-            ally[pos]->hp = 1;
+            create_minion(pos + i, a.derivant_id[i], SIDE_ALLY);
         }
     }
     else if (side == SIDE_ENEMY)
     {
         minion &e = *enemy[pos];
         kill_minion(pos, SIDE_ENEMY);
-        fill_up(SIDE_ENEMY);
 
-        int child_count = e.child_id.size();
-        if (MAX_MINION - enemy_count < child_count)
+        int child_count = e.derivant_id.size();
+        int avaliable_space = MAX_MINION - enemy.size();
+        if (avaliable_space < child_count)
         {
-            child_count = MAX_MINION - enemy_count;
-        }
-
-        if (child_count > 0)
-        {
-            reserve_space(pos, child_count, SIDE_ENEMY);
-            for (int i = 0; i < child_count; i++)
-            {
-                create_minion(pos + i, e.child_id[i], SIDE_ENEMY);
-            }
+            child_count = avaliable_space;
         }
 
-        if (e.reborn && enemy_count < MAX_MINION)
+        for (int i = 0; i < child_count; i++)
         {
-            reserve_space(pos, 1, SIDE_ENEMY);
-            create_minion(pos, e.id, SIDE_ENEMY);
-            enemy[pos]->reborn = false; // 应视为构造的一部分，不用接口化
-            enemy[pos]->hp = 1;
-        }
-    }
-}
-
-void GameState::fill_up(Side side)
-{
-    if (side == SIDE_ALLY)
-    {
-        for (int i = 0; i < ally_count; i++)
-        {
-            if (ally[i] == nullptr)
-            {
-                move_minion(i + 1, i, SIDE_ALLY);
-            }
-        }
-    }
-    else if (side == SIDE_ENEMY)
-    {
-        for (int i = 0; i < enemy_count; i++)
-        {
-            if (enemy[i] == nullptr)
-            {
-                move_minion(i + 1, i, SIDE_ENEMY);
-            }
-        }
-    }
-}
-
-void GameState::reserve_space(int pos, int space, Side side)
-{
-    if (side == SIDE_ALLY)
-    {
-        assert(space <= MAX_MINION - ally_count);
-        // -> ally_count+space<=MAX_MINION -> (ally_count-1)+space<MAX_MINION
-        // 把[pos,ally_count)的随从每个都向右移动space格,是不会越界的
-        for (int i = ally_count - 1; i >= pos; i--)
-        {
-            move_minion(i, i + space, SIDE_ALLY);
-        }
-    }
-    else if (side == SIDE_ENEMY)
-    {
-        assert(space <= MAX_MINION - enemy_count);
-        for (int i = enemy_count - 1; i >= pos; i--)
-        {
-            move_minion(i, i + space, SIDE_ENEMY);
+            create_minion(pos + i, e.derivant_id[i], SIDE_ENEMY);
         }
     }
 }

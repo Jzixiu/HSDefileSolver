@@ -19,13 +19,34 @@ class GameState
 public:
     GameState(std::istream &in);
 
+    /**
+     * @brief 使位于ally_pos的友方随从
+     * 攻击位于enemy_pos的敌方随从
+     *
+     * @param ally_pos 友方随从在场上的位置
+     * @param enemy_pos 敌方随从在场上的位置
+     */
     void attack(int ally_pos, int enemy_pos);
+    /**
+     * @brief 回溯上一次攻击
+     *
+     */
     void undo();
 
-    // 获取能被攻击的敌方随从的位置列表
+    /**
+     * @brief 获取能被攻击的敌方随从的位置列表
+     *
+     * @return 一个位置列表，
+     * 每个数字代表敌方场上处于该位置的敌方随从可以被当作攻击目标
+     */
     std::vector<int> get_enemy() const;
 
-    // 获取能发动攻击的友方随从的位置列表
+    /**
+     * @brief 获取能发起攻击的友方随从的位置列表
+     *
+     * @return 一个位置列表，
+     * 每个数字代表我方场上处于该位置的友方随从可以发起攻击
+     */
     std::vector<int> get_ally() const;
 
     void print(std::ostream &out = std::cout) const;
@@ -37,7 +58,7 @@ private:
     {
         minion(int id, int atk, int hp, bool shield,
                bool windfury, bool charge_or_rush, bool taunt, bool poisionous,
-               bool immune, bool reborn, std::vector<int> child);
+               bool immune, bool reborn, std::vector<int> derivant_id);
 
         const int id;
         const int atk;
@@ -49,34 +70,21 @@ private:
         const bool taunt;
         const bool poisionous;
         const bool immune;
-        bool reborn;
+        const bool reborn;
 
-        const std::vector<int> child_id;
+        const std::vector<int> derivant_id;
 
         void print(std::ostream &out) const;
     };
-
-    std::vector<minion> minion_template;
-
-    std::unique_ptr<minion> ally[MAX_MINION];
-    std::unique_ptr<minion> enemy[MAX_MINION];
-
-    int ally_count;
-    int enemy_count;
-
-    std::vector<std::unique_ptr<minion>> graveyard;
-
-    int parse_minion(std::istream &in);
 
     enum Operation_Type
     {
         OP_UNDEFINED,
         OP_CREATE,
         OP_KILL,
-        OP_MOVE,
         OP_MODIFY_HP,
-        OP_MODIFY_ATTACK_CHANCE,
-        OP_MODIFY_SHIELD
+        OP_DECREMENT_ATTACK_CHANCE,
+        OP_REMOVE_SHIELD
     };
 
     enum Side
@@ -97,33 +105,80 @@ private:
 
         // modify
         int old_hp;
-        int attack_chance;
-        bool shield;
-
-        // move;
-        int from_pos;
-        int to_pos;
     };
 
+    std::vector<minion> minion_template;
+    std::vector<std::unique_ptr<minion>> ally;
+    std::vector<std::unique_ptr<minion>> enemy;
+    std::vector<std::unique_ptr<minion>> graveyard;
+
+    int get_id(int atk, int hp, bool shield,
+        bool windfury, bool charge_or_rush, bool taunt, bool poisionous,
+        bool immune, bool reborn, std::vector<int> derivant_id);
+    int parse_minion(std::istream &in);
+
+    /**
+     * @brief 在指定位置创建一个指定id的随从
+     *
+     * @param pos 随从被创建的位置
+     * @param id minion_template中的id
+     * @param side 友方:SIDE_ALLY 敌方:SIDE_ENEMY
+     */
     void create_minion(int pos, int id, Side side);
+    /**
+     * @brief 将指定随从移到坟场
+     *
+     * @param pos 随从在场上的位置
+     * @param side 友方:SIDE_ALLY 敌方:SIDE_ENEMY
+     */
     void kill_minion(int pos, Side side);
-    void move_minion(int from, int to, Side side);
 
+    /**
+     * @brief 改变指定随从的hp
+     *
+     * @param pos 随从在场上的位置
+     * @param side 友方:SIDE_ALLY 敌方:SIDE_ENEMY
+     * @param new_val 该随从的新hp值
+     */
     void modify_minion_hp(int pos, Side side, int new_val);
-    void modify_minion_attack_chance(int pos, Side side, int new_val);
-    void modify_minion_shield(int pos, Side side, bool new_val);
+    /**
+     * @brief 使指定随从的attack_chance减少1
+     *
+     * @param pos 随从在场上的位置
+     * @param side 友方:SIDE_ALLY 敌方:SIDE_ENEMY
+     */
+    void decrement_minion_attack_chance(int pos, Side side);
+    /**
+     * @brief 移除指定随从的圣盾
+     *
+     * @param pos 随从在场上的位置
+     * @param side 友方:SIDE_ALLY 敌方:SIDE_ENEMY
+     */
+    void remove_minion_shield(int pos, Side side);
 
+    /**
+     * @brief 回溯一个操作
+     *
+     *
+     * @param op 被回溯的操作，必须是最新的操作(op_stack.top().top())
+     */
     void undo_operation(const operation &op);
 
+    /**
+     * @brief 操作栈，每个子栈代表一个攻击行为，
+     * 倒序回溯最新子栈的所有内容即可回溯整个攻击行为
+     *
+     */
     std::stack<std::stack<operation>> op_stack;
 
+    /**
+     * @brief 处理一个随从的死亡,
+     * 移到墓地、根据情况生成衍生物
+     *
+     * @param pos 被处理的随从在场上的位置
+     * @param side 友方:SIDE_ALLY 敌方:SIDE_ENEMY
+     */
     void process_death(int pos, Side side);
-
-    // 把列表中的1个空缺填上
-    void fill_up(Side side);
-
-    // 把[pos~pos+space)预留出来
-    void reserve_space(int pos, int space, Side side);
 };
 
 #endif
