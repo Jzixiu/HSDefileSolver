@@ -9,6 +9,7 @@
 #include <memory>
 
 #define MAX_MINION 7
+#define MAX_DEFILE_REPEAT 30 // 亵渎最多释放次数
 
 /**
  * @brief 高速可回溯的炉石场面模拟类
@@ -113,8 +114,8 @@ private:
     std::vector<std::unique_ptr<minion>> graveyard;
 
     int get_id(int atk, int hp, bool shield,
-        bool windfury, bool charge_or_rush, bool taunt, bool poisionous,
-        bool immune, bool reborn, std::vector<int> derivant_id);
+               bool windfury, bool charge_or_rush, bool taunt, bool poisionous,
+               bool immune, bool reborn, std::vector<int> derivant_id);
     int parse_minion(std::istream &in);
 
     /**

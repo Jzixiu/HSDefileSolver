@@ -186,6 +186,105 @@ void GameState::print(std::ostream &out) const
 
 int GameState::get_enemy_atk_after_Defile()
 {
+    int final_enemy_atk = 0;
+
+    std::vector<int> ally_of_effective_hp[MAX_DEFILE_REPEAT + 1];
+    std::vector<int> enemy_of_effective_hp[MAX_DEFILE_REPEAT + 1];
+
+    auto get_effective_hp = [&](int parent_effective_hp, const minion &m, Side s)
+    {
+        int effective_hp = m.hp;
+        if (m.shield)
+        {
+            effective_hp++;
+        }
+
+        effective_hp += parent_effective_hp;
+
+        if (s == SIDE_ALLY)
+        {
+            if (m.immune || effective_hp > MAX_DEFILE_REPEAT)
+            {
+            }
+            else
+            {
+                ally_of_effective_hp[effective_hp].push_back(m.id);
+            }
+        }
+        else if (s == SIDE_ENEMY)
+        {
+            if (m.immune || effective_hp > MAX_DEFILE_REPEAT)
+            {
+                final_enemy_atk += m.atk;
+            }
+            else
+            {
+                enemy_of_effective_hp[effective_hp].push_back(m.id);
+            }
+        }
+    };
+
+    for (int pos = 0; pos < ally.size(); pos++)
+    {
+        get_effective_hp(0, *ally[pos], SIDE_ALLY);
+    }
+
+    for (int pos = 0; pos < enemy.size(); pos++)
+    {
+        get_effective_hp(0, *enemy[pos], SIDE_ENEMY);
+    }
+
+    int ally_free_space = MAX_MINION - ally.size();
+    int enemy_free_space = MAX_MINION - enemy.size();
+    int defile_damage;
+
+    for (defile_damage = 1; defile_damage <= MAX_DEFILE_REPEAT; defile_damage++)
+    {
+        if (ally_of_effective_hp[defile_damage].size() != 0)
+        {
+            for (int minion_id : ally_of_effective_hp[defile_damage])
+            {
+                ally_free_space++; // 让这个随从死
+                for (int child_id : minion_template[minion_id].derivant_id)
+                {
+                    if (ally_free_space > 0)
+                    {
+                        get_effective_hp(defile_damage, minion_template[child_id], SIDE_ALLY);
+                        ally_free_space--;
+                    }
+                }
+            }
+        }
+        if (enemy_of_effective_hp[defile_damage].size() != 0)
+        {
+            for (int minion_id : enemy_of_effective_hp[defile_damage])
+            {
+                enemy_free_space++; // 让这个随从死
+                for (int child_id : minion_template[minion_id].derivant_id)
+                {
+                    if (enemy_free_space > 0)
+                    {
+                        get_effective_hp(defile_damage, minion_template[child_id], SIDE_ENEMY);
+                        enemy_free_space--;
+                    }
+                }
+            }
+        }
+        if (ally_of_effective_hp[defile_damage].size() == 0 && enemy_of_effective_hp[defile_damage].size() == 0)
+        {
+            break;
+        }
+    }
+
+    for (int i = defile_damage; i < MAX_DEFILE_REPEAT; i++)
+    {
+        for (int id : enemy_of_effective_hp[i])
+        {
+            final_enemy_atk += minion_template[id].atk;
+        }
+    }
+
+    return final_enemy_atk;
 }
 
 GameState::minion::minion(int id, int atk, int hp, bool shield,
