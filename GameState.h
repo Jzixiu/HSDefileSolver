@@ -52,7 +52,19 @@ public:
 
     void print(std::ostream &out = std::cout) const;
 
-    int get_enemy_atk_after_Defile();
+    /**
+     * @brief 准确计算亵渎后的剩余敌方场攻
+     * 
+     * @return int 敌方剩余场攻
+     */
+    int get_enemy_atk_after_Defile_exact();
+    /**
+     * @brief 用快速的方法估算，没有考虑一些边界情况，
+     * 如衍生随从时随从上限会挤掉一些衍生物
+     * 
+     * @return int 
+     */
+    int get_enemy_atk_after_Defile_fast();
 
 private:
     struct minion
@@ -180,6 +192,9 @@ private:
      * @param side 友方:SIDE_ALLY 敌方:SIDE_ENEMY
      */
     void process_death(int pos, Side side);
+
+    void get_effective_hp_fast(int parent_effective_hp, const minion &m, bool *hp_exists);
+    int get_atk_fast(int damage,const minion &m);
 };
 
 #endif

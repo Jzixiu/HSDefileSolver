@@ -184,7 +184,7 @@ void GameState::print(std::ostream &out) const
     out << std::endl;
 }
 
-int GameState::get_enemy_atk_after_Defile()
+int GameState::get_enemy_atk_after_Defile_exact()
 {
     int final_enemy_atk = 0;
 
@@ -285,6 +285,37 @@ int GameState::get_enemy_atk_after_Defile()
     }
 
     return final_enemy_atk;
+}
+
+int GameState::get_enemy_atk_after_Defile_fast()
+{
+    int defile_damage = 1;
+    bool hp_exists[MAX_DEFILE_REPEAT + 1];
+    for (int i = 0; i <= MAX_DEFILE_REPEAT; i++)
+    {
+        hp_exists[i] = false;
+    }
+
+    for (int i = 0; i < ally.size(); i++)
+    {
+        get_effective_hp_fast(0, *ally[i], hp_exists);
+    }
+    for (int i = 0; i < enemy.size(); i++)
+    {
+        get_effective_hp_fast(0, *enemy[i], hp_exists);
+    }
+
+    while (hp_exists[defile_damage])
+    {
+        defile_damage++;
+    }
+
+    int sum = 0;
+    for (int i = 0; i < enemy.size(); i++)
+    {
+        sum += get_atk_fast(defile_damage, *enemy[i]);
+    }
+    return sum;
 }
 
 GameState::minion::minion(int id, int atk, int hp, bool shield,
@@ -704,5 +735,45 @@ void GameState::process_death(int pos, Side side)
         {
             create_minion(pos + i, e.derivant_id[i], SIDE_ENEMY);
         }
+    }
+}
+
+void GameState::get_effective_hp_fast(int parent_effective_hp, const minion &m, bool *hp_exists)
+{
+    int effective_hp = parent_effective_hp + m.hp;
+    if (m.shield)
+    {
+        effective_hp++;
+    }
+    if (effective_hp <= MAX_DEFILE_REPEAT)
+    {
+        hp_exists[effective_hp] = true;
+    }
+    for (int child_id : m.derivant_id)
+    {
+        get_effective_hp_fast(effective_hp, minion_template[child_id], hp_exists);
+    }
+}
+
+int GameState::get_atk_fast(int damage, const minion &m)
+{
+    int effective_hp = m.hp;
+    if (m.shield)
+    {
+        effective_hp++;
+    }
+
+    if (damage < effective_hp)
+    {
+        return m.atk;
+    }
+    else
+    {
+        int sum = 0;
+        for (int child_id : m.derivant_id)
+        {
+            sum += get_atk_fast(damage - effective_hp, minion_template[child_id]);
+        }
+        return sum;
     }
 }

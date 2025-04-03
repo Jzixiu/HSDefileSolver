@@ -79,7 +79,7 @@ bool Solver::dfs()
 
 bool Solver::check_solution()
 {
-    int atk = gs.get_enemy_atk_after_Defile();
+    int atk = gs.get_enemy_atk_after_Defile_fast();
     if (atk < solution_atk || solution_atk == -1)
     {
         // 有更优解
