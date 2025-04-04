@@ -144,12 +144,14 @@ std::vector<int> GameState::get_ally() const
 void GameState::print(std::ostream &out) const
 {
     out << std::endl;
-    out << "格式:[id] 攻击力/血量 (攻击次数)";
+    out << "[pos] [id] 攻击力/血量 (攻击次数) [属性..]";
+    out << std::endl;
     out << std::endl;
 
     out << "模版:" << std::endl;
     for (int i = 0; i < minion_template.size(); i++)
     {
+        out << "[" << i << "] ";
         minion_template[i].print(out);
         out << std::endl;
     }
@@ -159,6 +161,7 @@ void GameState::print(std::ostream &out) const
     out << "敌方:" << std::endl;
     for (int i = 0; i < enemy.size(); i++)
     {
+        out << "[" << i << "] ";
         enemy[i]->print(out);
         out << std::endl;
     }
@@ -168,6 +171,7 @@ void GameState::print(std::ostream &out) const
     out << "友方:" << std::endl;
     for (int i = 0; i < ally.size(); i++)
     {
+        out << "[" << i << "] ";
         ally[i]->print(out);
         out << std::endl;
     }
@@ -177,6 +181,7 @@ void GameState::print(std::ostream &out) const
     out << "墓地:" << std::endl;
     for (int i = 0; i < graveyard.size(); i++)
     {
+        out << "[" << i << "] ";
         graveyard[i]->print(out);
         out << std::endl;
     }
