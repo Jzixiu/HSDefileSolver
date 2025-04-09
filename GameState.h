@@ -6,7 +6,7 @@
 #include <stack>
 
 #define MAX_MINION 7
-#define MAX_DEFILE_REPEAT 30 // 亵渎最多释放次数
+#define MAX_DEFILE_REPEAT 14 // 亵渎最多释放次数
 
 class GameState
 {
