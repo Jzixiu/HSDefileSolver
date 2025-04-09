@@ -1,16 +1,18 @@
 #include "GameState.h"
-#include <istream>
-#include <string>
+
+// Implicit include
+#include <iostream>
 #include <vector>
-#include <cassert>
+#include <stack>
 
 GameState::GameState(std::istream &in)
 {
+    ally.reserve(MAX_MINION);
+    enemy.reserve(MAX_MINION);
+    minions.reserve(3 * MAX_MINION);
+
     int enemy_count, ally_count;
     in >> enemy_count >> ally_count;
-
-    assert(0 <= enemy_count && enemy_count <= MAX_MINION);
-    assert(0 <= ally_count && ally_count <= MAX_MINION);
 
     std::vector<int> initial_attack_chance;
 
@@ -24,80 +26,72 @@ GameState::GameState(std::istream &in)
     for (int i = 0; i < enemy_count; i++)
     {
         int id = parse_minion(in);
-        enemy.push_back(std::make_unique<minion>(minion_template[id]));
+        enemy.push_back(push_minion(id));
     }
 
     for (int i = 0; i < ally_count; i++)
     {
         int id = parse_minion(in);
-        ally.push_back(std::make_unique<minion>(minion_template[id]));
+        ally.push_back(push_minion(id));
         if (initial_attack_chance[i] != -1)
         {
-            ally[i]->attack_chance = initial_attack_chance[i];
+            minions[ally[i]].attack_chance = initial_attack_chance[i];
         }
     }
 }
 
 void GameState::attack(int ally_pos, int enemy_pos)
 {
-    assert(ally_pos < ally.size() && enemy_pos < enemy.size());
-    assert(ally[ally_pos] != nullptr && enemy[enemy_pos] != nullptr);
-    assert(ally[ally_pos]->attack_chance > 0 && ally[ally_pos]->atk > 0);
-
     op_stack.emplace();
 
-    const minion &a = *ally[ally_pos];
-    const minion &e = *enemy[enemy_pos];
+    int ally_instance_id = ally[ally_pos];
+    int enemy_instance_id = enemy[enemy_pos];
 
-    decrement_minion_attack_chance(ally_pos, SIDE_ALLY);
+    const minion &a = minions[ally_instance_id];
+    const minion &e = minions[enemy_instance_id];
 
-    // 处理友方随从
+    decrement_minion_attack_chance(ally_instance_id);
 
     if (e.atk > 0 && !a.immune)
     {
         if (a.shield)
         {
-            remove_minion_shield(ally_pos, SIDE_ALLY);
+            remove_minion_shield(ally_instance_id);
         }
         else
         {
-            modify_minion_hp(ally_pos, SIDE_ALLY, a.hp - e.atk);
+            modify_minion_hp(ally_instance_id, a.hp - e.atk);
         }
 
         if (a.hp <= 0 || e.poisionous)
         {
-            process_death(ally_pos, SIDE_ALLY);
+            process_death(SIDE_ALLY, ally_pos);
         }
     }
-
-    // 处理敌方随从
 
     if (!e.immune)
     {
         if (e.shield)
         {
-            remove_minion_shield(enemy_pos, SIDE_ENEMY);
+            remove_minion_shield(enemy_instance_id);
         }
         else
         {
-            modify_minion_hp(enemy_pos, SIDE_ENEMY, e.hp - a.atk);
+            modify_minion_hp(enemy_instance_id, e.hp - a.atk);
         }
 
         if (e.hp <= 0 || a.poisionous)
         {
-            process_death(enemy_pos, SIDE_ENEMY);
+            process_death(SIDE_ENEMY, enemy_pos);
         }
     }
 }
 
-void GameState::undo()
+void GameState::undo_last_attack()
 {
-    assert(op_stack.size() > 0);
-    std::stack<operation> &ops = op_stack.top();
-    while (!ops.empty())
+    while (!op_stack.top().empty())
     {
-        undo_operation(ops.top());
-        ops.pop();
+        undo_last_operation();
     }
     op_stack.pop();
 }
@@ -108,9 +102,10 @@ std::vector<int> GameState::get_enemy() const
     bool have_taunt = false;
     for (int i = 0; i < enemy.size(); i++)
     {
+        bool this_have_taunt = minions[enemy[i]].taunt;
         if (!have_taunt)
         {
-            if (enemy[i]->taunt)
+            if (this_have_taunt)
             {
                 have_taunt = true;
                 res.clear();
@@ -119,7 +114,7 @@ std::vector<int> GameState::get_enemy() const
         }
         else
         {
-            if (enemy[i]->taunt)
+            if (this_have_taunt)
             {
                 res.push_back(i);
             }
@@ -133,7 +128,7 @@ std::vector<int> GameState::get_ally() const
     std::vector<int> res;
     for (int i = 0; i < ally.size(); i++)
     {
-        if (ally[i]->attack_chance > 0)
+        if (minions[ally[i]].attack_chance > 0)
         {
             res.push_back(i);
         }
@@ -144,14 +139,11 @@ std::vector<int> GameState::get_ally() const
 void GameState::print(std::ostream &out) const
 {
     out << std::endl;
-    out << "[pos] [id] 攻击力/血量 (攻击次数) [属性..]";
-    out << std::endl;
     out << std::endl;
 
     out << "模版:" << std::endl;
     for (int i = 0; i < minion_template.size(); i++)
     {
-        out << "[" << i << "] ";
         minion_template[i].print(out);
         out << std::endl;
     }
@@ -161,9 +153,8 @@ void GameState::print(std::ostream &out) const
     out << "敌方:" << std::endl;
     for (int i = 0; i < enemy.size(); i++)
     {
-        out << "[" << i << "] ";
-        enemy[i]->print(out);
-        out << std::endl;
+        minions[enemy[i]].print(out);
+        out << "  |  ";
     }
     out << std::endl;
     out << std::endl;
@@ -171,9 +162,8 @@ void GameState::print(std::ostream &out) const
     out << "友方:" << std::endl;
     for (int i = 0; i < ally.size(); i++)
     {
-        out << "[" << i << "] ";
-        ally[i]->print(out);
-        out << std::endl;
+        minions[ally[i]].print(out);
+        out << "  |  ";
     }
     out << std::endl;
     out << std::endl;
@@ -181,121 +171,18 @@ void GameState::print(std::ostream &out) const
     out << "墓地:" << std::endl;
     for (int i = 0; i < graveyard.size(); i++)
     {
-        out << "[" << i << "] ";
-        graveyard[i]->print(out);
+        minions[graveyard[i]].print(out);
         out << std::endl;
     }
     out << std::endl;
     out << std::endl;
 }
 
-int GameState::get_enemy_atk_after_Defile_exact()
-{
-    int final_enemy_atk = 0;
-
-    std::vector<int> ally_of_effective_hp[MAX_DEFILE_REPEAT + 1];
-    std::vector<int> enemy_of_effective_hp[MAX_DEFILE_REPEAT + 1];
-
-    auto get_effective_hp = [&](int parent_effective_hp, const minion &m, Side s)
-    {
-        int effective_hp = m.hp;
-        if (m.shield)
-        {
-            effective_hp++;
-        }
-
-        effective_hp += parent_effective_hp;
-
-        if (s == SIDE_ALLY)
-        {
-            if (m.immune || effective_hp > MAX_DEFILE_REPEAT)
-            {
-            }
-            else
-            {
-                ally_of_effective_hp[effective_hp].push_back(m.id);
-            }
-        }
-        else if (s == SIDE_ENEMY)
-        {
-            if (m.immune || effective_hp > MAX_DEFILE_REPEAT)
-            {
-                final_enemy_atk += m.atk;
-            }
-            else
-            {
-                enemy_of_effective_hp[effective_hp].push_back(m.id);
-            }
-        }
-    };
-
-    for (int pos = 0; pos < ally.size(); pos++)
-    {
-        get_effective_hp(0, *ally[pos], SIDE_ALLY);
-    }
-
-    for (int pos = 0; pos < enemy.size(); pos++)
-    {
-        get_effective_hp(0, *enemy[pos], SIDE_ENEMY);
-    }
-
-    int ally_free_space = MAX_MINION - ally.size();
-    int enemy_free_space = MAX_MINION - enemy.size();
-    int defile_damage;
-
-    for (defile_damage = 1; defile_damage <= MAX_DEFILE_REPEAT; defile_damage++)
-    {
-        if (ally_of_effective_hp[defile_damage].size() != 0)
-        {
-            for (int minion_id : ally_of_effective_hp[defile_damage])
-            {
-                ally_free_space++; // 让这个随从死
-                for (int child_id : minion_template[minion_id].derivant_id)
-                {
-                    if (ally_free_space > 0)
-                    {
-                        get_effective_hp(defile_damage, minion_template[child_id], SIDE_ALLY);
-                        ally_free_space--;
-                    }
-                }
-            }
-        }
-        if (enemy_of_effective_hp[defile_damage].size() != 0)
-        {
-            for (int minion_id : enemy_of_effective_hp[defile_damage])
-            {
-                enemy_free_space++; // 让这个随从死
-                for (int child_id : minion_template[minion_id].derivant_id)
-                {
-                    if (enemy_free_space > 0)
-                    {
-                        get_effective_hp(defile_damage, minion_template[child_id], SIDE_ENEMY);
-                        enemy_free_space--;
-                    }
-                }
-            }
-        }
-        if (ally_of_effective_hp[defile_damage].size() == 0 && enemy_of_effective_hp[defile_damage].size() == 0)
-        {
-            break;
-        }
-    }
-
-    for (int i = defile_damage; i < MAX_DEFILE_REPEAT; i++)
-    {
-        for (int id : enemy_of_effective_hp[i])
-        {
-            final_enemy_atk += minion_template[id].atk;
-        }
-    }
-
-    return final_enemy_atk;
-}
-
-int GameState::get_enemy_atk_after_Defile_fast()
+int GameState::get_enemy_atk_after_Defile(bool exact)
 {
     int defile_damage = 1;
     bool hp_exists[MAX_DEFILE_REPEAT + 1];
+
     for (int i = 0; i <= MAX_DEFILE_REPEAT; i++)
     {
         hp_exists[i] = false;
@@ -303,14 +190,14 @@ int GameState::get_enemy_atk_after_Defile_fast()
 
     for (int i = 0; i < ally.size(); i++)
     {
-        get_effective_hp_fast(0, *ally[i], hp_exists);
+        get_effective_hp(0, minions[ally[i]], hp_exists);
     }
     for (int i = 0; i < enemy.size(); i++)
     {
-        get_effective_hp_fast(0, *enemy[i], hp_exists);
+        get_effective_hp(0, minions[enemy[i]], hp_exists);
     }
 
-    while (hp_exists[defile_damage])
+    while (defile_damage <= MAX_DEFILE_REPEAT && hp_exists[defile_damage])
     {
         defile_damage++;
     }
@@ -318,7 +205,7 @@ int GameState::get_enemy_atk_after_Defile_fast()
     int sum = 0;
     for (int i = 0; i < enemy.size(); i++)
     {
-        sum += get_atk_fast(defile_damage, *enemy[i]);
+        sum += get_atk(defile_damage, minions[enemy[i]]);
     }
     return sum;
 }
@@ -330,6 +217,7 @@ GameState::minion::minion(int id, int atk, int hp, bool shield,
       windfury(windfury), charge_or_rush(charge_or_rush), taunt(taunt), poisionous(poisionous),
       immune(immune), reborn(reborn), derivant_id(std::move(derivant_id))
 {
+    attack_chance = 0;
     if (charge_or_rush && atk > 0)
     {
         attack_chance = 1;
@@ -383,14 +271,6 @@ void GameState::minion::print(std::ostream &out) const
         out << " ";
         out << "]";
     }
-}
-
-GameState::operation::operation()
-{
-    type = OP_UNDEFINED;
-    side = SIDE_UNDEFINED;
-    pos = -1;
-    old_hp = -1;
 }
 
 int GameState::get_id(int atk, int hp, bool shield,
@@ -523,196 +403,151 @@ int GameState::parse_minion(std::istream &in)
     return get_id(atk, hp, shield, windfury, charge_or_rush, taunt, poisionous, immune, reborn, derivant_id);
 }
 
-void GameState::create_minion(int pos, int id, Side side)
+int GameState::push_minion(int id)
 {
-    op_stack.top().emplace();
-    operation &op = op_stack.top().top();
-    op.type = OP_CREATE;
-    op.side = side;
-    op.pos = pos;
+    int instance_id = minions.size();
+    minions.emplace_back(minion_template[id]);
+    return instance_id;
+}
 
+GameState::operation::operation(Operation_Type type, Side side, int pos)
+    : type(type), side(side), pos(pos),
+      instance_id(-1), old_hp(-1)
+{
+}
+
+GameState::operation::operation(Operation_Type type, int instance_id, int old_hp)
+    : type(type), instance_id(instance_id), old_hp(old_hp),
+      side(SIDE_UNDEFINED), pos(-1)
+{
+}
+
+GameState::operation::operation(Operation_Type type, int instance_id)
+    : type(type), instance_id(instance_id),
+      side(SIDE_UNDEFINED), pos(-1), old_hp(-1)
+{
+}
+
+void GameState::create_minion(Side side, int pos, int id)
+{
+    op_stack.top().emplace(
+        OP_CREATE,
+        side,
+        pos);
+
+    int instance_id = push_minion(id);
     if (side == SIDE_ALLY)
     {
-        assert(0 <= pos && pos <= ally.size());
-        ally.insert(ally.begin() + pos, std::make_unique<minion>(minion_template[id]));
+        ally.insert(ally.begin() + pos, instance_id);
     }
     else if (side == SIDE_ENEMY)
     {
-        assert(0 <= pos && pos <= enemy.size());
-        enemy.insert(enemy.begin() + pos, std::make_unique<minion>(minion_template[id]));
+        enemy.insert(enemy.begin() + pos, instance_id);
     }
 }
 
-void GameState::kill_minion(int pos, Side side)
+void GameState::move_minion_to_graveyard(Side side, int pos)
 {
-    op_stack.top().emplace();
-    operation &op = op_stack.top().top();
-    op.type = OP_KILL;
-    op.side = side;
-    op.pos = pos;
+    op_stack.top().emplace(
+        OP_MOVE_TO_GRAVEYARD,
+        side,
+        pos);
 
+    int instance_id;
     if (side == SIDE_ALLY)
     {
-        assert(0 <= pos && pos < ally.size());
-        assert(ally[pos] != nullptr);
-        graveyard.push_back(std::move(ally[pos]));
+        instance_id = ally[pos];
         ally.erase(ally.begin() + pos);
     }
     else if (side == SIDE_ENEMY)
     {
-        assert(0 <= pos && pos < enemy.size());
-        assert(enemy[pos] != nullptr);
-        graveyard.push_back(std::move(enemy[pos]));
+        instance_id = enemy[pos];
         enemy.erase(enemy.begin() + pos);
     }
+    graveyard.push_back(instance_id);
 }
 
-void GameState::modify_minion_hp(int pos, Side side, int new_val)
+void GameState::modify_minion_hp(int instance_id, int new_val)
 {
-    op_stack.top().emplace();
-    operation &op = op_stack.top().top();
-    op.type = OP_MODIFY_HP;
-    op.side = side;
-    op.pos = pos;
+    op_stack.top().emplace(
+        OP_MODIFY_HP,
+        instance_id,
+        minions[instance_id].hp);
 
-    if (side == SIDE_ALLY)
-    {
-        assert(0 <= pos && pos < ally.size());
-        assert(ally[pos] != nullptr);
-        op.old_hp = ally[pos]->hp;
-        ally[pos]->hp = new_val;
-    }
-    else if (side == SIDE_ENEMY)
-    {
-        assert(0 <= pos && pos < enemy.size());
-        assert(enemy[pos] != nullptr);
-        op.old_hp = enemy[pos]->hp;
-        enemy[pos]->hp = new_val;
-    }
+    minions[instance_id].hp = new_val;
 }
 
-void GameState::decrement_minion_attack_chance(int pos, Side side)
+void GameState::decrement_minion_attack_chance(int instance_id)
 {
-    op_stack.top().emplace();
-    operation &op = op_stack.top().top();
-    op.type = OP_DECREMENT_ATTACK_CHANCE;
-    op.side = side;
-    op.pos = pos;
+    op_stack.top().emplace(
+        OP_DECREMENT_ATTACK_CHANCE,
+        instance_id);
 
-    if (side == SIDE_ALLY)
-    {
-        assert(0 <= pos && pos < ally.size());
-        assert(ally[pos] != nullptr);
-        ally[pos]->attack_chance--;
-    }
-    else if (side == SIDE_ENEMY)
-    {
-        assert(0 <= pos && pos < enemy.size());
-        assert(enemy[pos] != nullptr);
-        enemy[pos]->attack_chance--;
-    }
+    minions[instance_id].attack_chance--;
 }
 
-void GameState::remove_minion_shield(int pos, Side side)
+void GameState::remove_minion_shield(int instance_id)
 {
-    op_stack.top().emplace();
-    operation &op = op_stack.top().top();
-    op.type = OP_REMOVE_SHIELD;
-    op.side = side;
-    op.pos = pos;
+    op_stack.top().emplace(
+        OP_REMOVE_SHIELD,
+        instance_id);
 
-    if (side == SIDE_ALLY)
-    {
-        assert(0 <= pos && pos < ally.size());
-        assert(ally[pos] != nullptr);
-        ally[pos]->shield = false;
-    }
-    else if (side == SIDE_ENEMY)
-    {
-        assert(0 <= pos && pos < enemy.size());
-        assert(enemy[pos] != nullptr);
-        enemy[pos]->shield = false;
-    }
+    minions[instance_id].shield = false;
 }
 
-void GameState::undo_operation(const operation &op)
+void GameState::undo_last_operation()
 {
+    const operation &op = op_stack.top().top();
     switch (op.type)
     {
     case OP_CREATE:
+        minions.pop_back();
         if (op.side == SIDE_ALLY)
         {
-            ally[op.pos].reset();
             ally.erase(ally.begin() + op.pos);
         }
         else if (op.side == SIDE_ENEMY)
         {
-            enemy[op.pos].reset();
             enemy.erase(enemy.begin() + op.pos);
         }
         break;
 
-    case OP_KILL:
+    case OP_MOVE_TO_GRAVEYARD:
+        int instance_id = graveyard.back();
+        graveyard.pop_back();
         if (op.side == SIDE_ALLY)
         {
-            ally.insert(ally.begin() + op.pos, std::move(graveyard.back()));
-            graveyard.pop_back();
+            ally.insert(ally.begin() + op.pos, instance_id);
         }
         else if (op.side == SIDE_ENEMY)
         {
-            enemy.insert(enemy.begin() + op.pos, std::move(graveyard.back()));
-            graveyard.pop_back();
+            enemy.insert(enemy.begin() + op.pos, instance_id);
         }
         break;
 
     case OP_MODIFY_HP:
-        if (op.side == SIDE_ALLY)
-        {
-            ally[op.pos]->hp = op.old_hp;
-        }
-        else if (op.side == SIDE_ENEMY)
-        {
-            enemy[op.pos]->hp = op.old_hp;
-        }
+        minions[op.instance_id].hp = op.old_hp;
         break;
-
     case OP_DECREMENT_ATTACK_CHANCE:
-        if (op.side == SIDE_ALLY)
-        {
-            ally[op.pos]->attack_chance++;
-        }
-        else if (op.side == SIDE_ENEMY)
-        {
-            enemy[op.pos]->attack_chance++;
-        }
+        minions[op.instance_id].attack_chance++;
         break;
-
     case OP_REMOVE_SHIELD:
-        if (op.side == SIDE_ALLY)
-        {
-            assert(ally[op.pos] != nullptr);
-            ally[op.pos]->shield = true;
-        }
-        else if (op.side == SIDE_ENEMY)
-        {
-            assert(enemy[op.pos] != nullptr);
-            enemy[op.pos]->shield = true;
-        }
+        minions[op.instance_id].shield = true;
         break;
-
     default:
         break;
     }
+    op_stack.top().pop();
 }
 
-void GameState::process_death(int pos, Side side)
+void GameState::process_death(Side side, int pos)
 {
     if (side == SIDE_ALLY)
     {
-        minion &a = *ally[pos];
-        kill_minion(pos, SIDE_ALLY);
+        int instance_id = ally[pos];
+        move_minion_to_graveyard(SIDE_ALLY, pos);
 
-        int child_count = a.derivant_id.size();
+        int child_count = minions[instance_id].derivant_id.size();
         int avaliable_space = MAX_MINION - ally.size();
         if (avaliable_space < child_count)
         {
@@ -721,15 +556,15 @@ void GameState::process_death(int pos, Side side)
 
         for (int i = 0; i < child_count; i++)
         {
-            create_minion(pos + i, a.derivant_id[i], SIDE_ALLY);
+            create_minion(SIDE_ALLY, pos + i, minions[instance_id].derivant_id[i]);
         }
     }
     else if (side == SIDE_ENEMY)
     {
-        minion &e = *enemy[pos];
-        kill_minion(pos, SIDE_ENEMY);
+        int instance_id = enemy[pos];
+        move_minion_to_graveyard(SIDE_ENEMY, pos);
 
-        int child_count = e.derivant_id.size();
+        int child_count = minions[instance_id].derivant_id.size();
         int avaliable_space = MAX_MINION - enemy.size();
         if (avaliable_space < child_count)
         {
@@ -738,12 +573,12 @@ void GameState::process_death(int pos, Side side)
 
         for (int i = 0; i < child_count; i++)
         {
-            create_minion(pos + i, e.derivant_id[i], SIDE_ENEMY);
+            create_minion(SIDE_ENEMY, pos + i, minions[instance_id].derivant_id[i]);
         }
     }
 }
 
-void GameState::get_effective_hp_fast(int parent_effective_hp, const minion &m, bool *hp_exists)
+void GameState::get_effective_hp(int parent_effective_hp, const minion &m, bool *hp_exists)
 {
     int effective_hp = parent_effective_hp + m.hp;
     if (m.shield)
@@ -756,11 +591,11 @@ void GameState::get_effective_hp_fast(int parent_effective_hp, const minion &m, 
     }
     for (int child_id : m.derivant_id)
     {
-        get_effective_hp_fast(effective_hp, minion_template[child_id], hp_exists);
+        get_effective_hp(effective_hp, minion_template[child_id], hp_exists);
     }
 }
 
-int GameState::get_atk_fast(int damage, const minion &m)
+int GameState::get_atk(int damage, const minion &m)
 {
     int effective_hp = m.hp;
     if (m.shield)
@@ -777,7 +612,7 @@ int GameState::get_atk_fast(int damage, const minion &m)
         int sum = 0;
         for (int child_id : m.derivant_id)
         {
-            sum += get_atk_fast(damage - effective_hp, minion_template[child_id]);
+            sum += get_atk(damage - effective_hp, minion_template[child_id]);
         }
         return sum;
     }

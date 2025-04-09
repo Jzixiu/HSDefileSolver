@@ -14,7 +14,7 @@ public:
     GameState(std::istream &in);
 
     void attack(int ally_pos, int enemy_pos);
-    void undo_attack();
+    void undo_last_attack();
 
     std::vector<int> get_enemy() const;
     std::vector<int> get_ally() const;
@@ -58,6 +58,7 @@ private:
                bool windfury, bool charge_or_rush, bool taunt, bool poisionous,
                bool immune, bool reborn, std::vector<int> derivant_id);
     int parse_minion(std::istream &in);
+    int push_minion(int id);
 
     enum Operation_Type
     {
@@ -69,30 +70,39 @@ private:
     };
     enum Side
     {
+        SIDE_UNDEFINED,
         SIDE_ALLY,
         SIDE_ENEMY
     };
 
     struct operation
     {
+        operation(Operation_Type type, Side side, int pos);
+        operation(Operation_Type type, int instance_id, int old_hp);
+        operation(Operation_Type type, int instance_id);
         Operation_Type type;
-        
+
         Side side;
         int pos;
+        int instance_id;
 
         int old_hp;
     };
 
-    void create_minion(int pos, int id, Side side);
-    void move_minion_to_graveyard(int pos, Side side);
-
-    void modify_minion_hp(int pos, Side side, int new_val);
-    void decrement_minion_attack_chance(int pos, Side side);
-    void remove_minion_shield(int pos, Side side);
-
-    void undo_last_operation();
     std::stack<std::stack<operation>> op_stack;
 
-    void process_death(int pos, Side side);
+    void create_minion(Side side, int pos, int id);
+    void move_minion_to_graveyard(Side side, int pos);
+
+    void modify_minion_hp(int instance_id, int new_val);
+    void decrement_minion_attack_chance(int instance_id);
+    void remove_minion_shield(int instance_id);
+
+    void undo_last_operation();
+
+    void process_death(Side side, int pos);
+
+    void get_effective_hp(int parent_effective_hp, const minion &m, bool *hp_exists);
+    int get_atk(int damage,const minion &m);
 };
 #endif
