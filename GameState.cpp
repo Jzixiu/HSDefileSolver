@@ -501,6 +501,7 @@ void GameState::undo_last_operation()
     switch (op.type)
     {
     case OP_CREATE:
+    {
         minions.pop_back();
         if (op.side == SIDE_ALLY)
         {
@@ -511,8 +512,9 @@ void GameState::undo_last_operation()
             enemy.erase(enemy.begin() + op.pos);
         }
         break;
-
+    }
     case OP_MOVE_TO_GRAVEYARD:
+    {
         int instance_id = graveyard.back();
         graveyard.pop_back();
         if (op.side == SIDE_ALLY)
@@ -524,18 +526,26 @@ void GameState::undo_last_operation()
             enemy.insert(enemy.begin() + op.pos, instance_id);
         }
         break;
-
+    }
     case OP_MODIFY_HP:
+    {
         minions[op.instance_id].hp = op.old_hp;
         break;
+    }
     case OP_DECREMENT_ATTACK_CHANCE:
+    {
         minions[op.instance_id].attack_chance++;
         break;
+    }
     case OP_REMOVE_SHIELD:
+    {
         minions[op.instance_id].shield = true;
         break;
+    }
     default:
+    {
         break;
+    }
     }
     op_stack.top().pop();
 }

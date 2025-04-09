@@ -47,7 +47,7 @@ void Solver::attack(int ally_pos, int enemy_pos)
 void Solver::undo()
 {
     steps.pop_back();
-    gs.undo();
+    gs.undo_last_attack();
 }
 
 bool Solver::dfs()
@@ -79,7 +79,7 @@ bool Solver::dfs()
 
 bool Solver::check_solution()
 {
-    int atk = gs.get_enemy_atk_after_Defile_fast();
+    int atk = gs.get_enemy_atk_after_Defile(false);
     if (atk < solution_atk || solution_atk == -1)
     {
         // 有更优解
