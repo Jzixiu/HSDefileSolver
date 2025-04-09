@@ -3,7 +3,6 @@
 // Implicit include
 #include <iostream>
 #include <vector>
-#include <stack>
 
 GameState::GameState(std::istream &in)
 {
@@ -42,7 +41,7 @@ GameState::GameState(std::istream &in)
 
 void GameState::attack(int ally_pos, int enemy_pos)
 {
-    op_stack.emplace();
+    step_size.push_back(0); // 新的一步
 
     int ally_instance_id = ally[ally_pos];
     int enemy_instance_id = enemy[enemy_pos];
@@ -89,16 +88,17 @@ void GameState::attack(int ally_pos, int enemy_pos)
 
 void GameState::undo_last_attack()
 {
-    while (!op_stack.top().empty())
+    int len = step_size.back();
+    step_size.pop_back();
+
+    for (int i = 0; i < len; i++)
     {
         undo_last_operation();
     }
-    op_stack.pop();
 }
 
-std::vector<int> GameState::get_enemy() const
+void GameState::get_enemy(std::vector<int> &vec) const
 {
-    std::vector<int> res;
     bool have_taunt = false;
     for (int i = 0; i < enemy.size(); i++)
     {
@@ -108,32 +108,29 @@ std::vector<int> GameState::get_enemy() const
             if (this_have_taunt)
             {
                 have_taunt = true;
-                res.clear();
+                vec.clear();
             }
-            res.push_back(i);
+            vec.push_back(i);
         }
         else
         {
             if (this_have_taunt)
             {
-                res.push_back(i);
+                vec.push_back(i);
             }
         }
     }
-    return res;
 }
 
-std::vector<int> GameState::get_ally() const
+void GameState::get_ally(std::vector<int> &vec) const
 {
-    std::vector<int> res;
     for (int i = 0; i < ally.size(); i++)
     {
         if (minions[ally[i]].attack_chance > 0)
         {
-            res.push_back(i);
+            vec.push_back(i);
         }
     }
-    return res;
 }
 
 void GameState::print(std::ostream &out) const
@@ -430,10 +427,11 @@ GameState::operation::operation(Operation_Type type, int instance_id)
 
 void GameState::create_minion(Side side, int pos, int id)
 {
-    op_stack.top().emplace(
+    op_sequence.emplace_back(
         OP_CREATE,
         side,
         pos);
+    step_size.back()++;
 
     int instance_id = push_minion(id);
     if (side == SIDE_ALLY)
@@ -448,10 +446,11 @@ void GameState::create_minion(Side side, int pos, int id)
 
 void GameState::move_minion_to_graveyard(Side side, int pos)
 {
-    op_stack.top().emplace(
+    op_sequence.emplace_back(
         OP_MOVE_TO_GRAVEYARD,
         side,
         pos);
+    step_size.back()++;
 
     int instance_id;
     if (side == SIDE_ALLY)
@@ -469,35 +468,38 @@ void GameState::move_minion_to_graveyard(Side side, int pos)
 
 void GameState::modify_minion_hp(int instance_id, int new_val)
 {
-    op_stack.top().emplace(
+    op_sequence.emplace_back(
         OP_MODIFY_HP,
         instance_id,
         minions[instance_id].hp);
+    step_size.back()++;
 
     minions[instance_id].hp = new_val;
 }
 
 void GameState::decrement_minion_attack_chance(int instance_id)
 {
-    op_stack.top().emplace(
+    op_sequence.emplace_back(
         OP_DECREMENT_ATTACK_CHANCE,
         instance_id);
+    step_size.back()++;
 
     minions[instance_id].attack_chance--;
 }
 
 void GameState::remove_minion_shield(int instance_id)
 {
-    op_stack.top().emplace(
+    op_sequence.emplace_back(
         OP_REMOVE_SHIELD,
         instance_id);
+    step_size.back()++;
 
     minions[instance_id].shield = false;
 }
 
 void GameState::undo_last_operation()
 {
-    const operation &op = op_stack.top().top();
+    const operation &op = op_sequence.back();
     switch (op.type)
     {
     case OP_CREATE:
@@ -547,7 +549,7 @@ void GameState::undo_last_operation()
         break;
     }
     }
-    op_stack.top().pop();
+    op_sequence.pop_back();
 }
 
 void GameState::process_death(Side side, int pos)

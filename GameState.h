@@ -3,7 +3,6 @@
 
 #include <iostream>
 #include <vector>
-#include <stack>
 
 #define MAX_MINION 7
 #define MAX_DEFILE_REPEAT 14 // 亵渎最多释放次数
@@ -16,8 +15,8 @@ public:
     void attack(int ally_pos, int enemy_pos);
     void undo_last_attack();
 
-    std::vector<int> get_enemy() const;
-    std::vector<int> get_ally() const;
+    void get_enemy(std::vector<int> &vec) const;
+    void get_ally(std::vector<int> &vec) const;
 
     void print(std::ostream &out = std::cout) const;
 
@@ -89,7 +88,8 @@ private:
         int old_hp;
     };
 
-    std::stack<std::stack<operation>> op_stack;
+    std::vector<operation> op_sequence;
+    std::vector<int> step_size;
 
     void create_minion(Side side, int pos, int id);
     void move_minion_to_graveyard(Side side, int pos);
@@ -103,6 +103,6 @@ private:
     void process_death(Side side, int pos);
 
     void get_effective_hp(int parent_effective_hp, const minion &m, bool *hp_exists);
-    int get_atk(int damage,const minion &m);
+    int get_atk(int damage, const minion &m);
 };
 #endif
