@@ -1,5 +1,11 @@
 #include "Solver.h"
 
+// Implicit include
+#include <vector>
+#include <functional>
+
+#include <chrono>
+
 Solver::Solver(GameState &game)
     : gs(game), solution_atk(-1), elapsed_time(-1LL),
       incumbent_callback([](int, const std::vector<step> &) {})
@@ -57,8 +63,11 @@ bool Solver::dfs()
         return true;
     }
 
-    const std::vector<int> &enemy = gs.get_enemy();
-    const std::vector<int> &ally = gs.get_ally();
+    std::vector<int> enemy;
+    std::vector<int> ally;
+
+    gs.get_enemy(enemy);
+    gs.get_ally(ally);
 
     for (int ally_pos : ally)
     {

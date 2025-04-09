@@ -3,6 +3,7 @@
 
 #include "GameState.h"
 #include <vector>
+#include <functional>
 
 class Solver
 {
@@ -28,7 +29,7 @@ private:
     std::vector<step> steps;
     int solution_atk;
     std::vector<step> solution;
-    long long elapsed_time;
+    long long elapsed_time; // In milliseconds
 
     void attack(int ally_pos, int enemy_pos);
     void undo();
