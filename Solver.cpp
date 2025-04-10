@@ -88,7 +88,7 @@ bool Solver::dfs()
 
 bool Solver::check_solution()
 {
-    int atk = gs.get_enemy_atk_after_Defile(false);
+    int atk = gs.get_enemy_atk_after_Defile();
     if (atk < solution_atk || solution_atk == -1)
     {
         // 有更优解

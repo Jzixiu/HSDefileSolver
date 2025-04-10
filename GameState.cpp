@@ -99,6 +99,7 @@ void GameState::undo_last_attack()
 
 void GameState::get_enemy(std::vector<int> &vec) const
 {
+    vec.reserve(enemy.size());
     bool have_taunt = false;
     for (int i = 0; i < enemy.size(); i++)
     {
@@ -124,6 +125,7 @@ void GameState::get_enemy(std::vector<int> &vec) const
 
 void GameState::get_ally(std::vector<int> &vec) const
 {
+    vec.reserve(ally.size());
     for (int i = 0; i < ally.size(); i++)
     {
         if (minions[ally[i]].attack_chance > 0)
@@ -175,7 +177,7 @@ void GameState::print(std::ostream &out) const
     out << std::endl;
 }
 
-int GameState::get_enemy_atk_after_Defile(bool exact)
+int GameState::get_enemy_atk_after_Defile()
 {
     int defile_damage = 1;
     bool hp_exists[MAX_DEFILE_REPEAT + 1];

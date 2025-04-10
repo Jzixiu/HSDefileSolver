@@ -20,7 +20,7 @@ public:
 
     void print(std::ostream &out = std::cout) const;
 
-    int get_enemy_atk_after_Defile(bool exact);
+    int get_enemy_atk_after_Defile();
 
 private:
     struct minion
