@@ -10,6 +10,11 @@ GameState::GameState(std::istream &in)
     enemy.reserve(MAX_MINION);
     minions.reserve(3 * MAX_MINION);
 
+    for (int i = 0; i <= MAX_DEFILE_REPEAT; i++)
+    {
+        num_of_ehp[i] = 0;
+    }
+
     int enemy_count, ally_count;
     in >> enemy_count >> ally_count;
 
@@ -26,6 +31,10 @@ GameState::GameState(std::istream &in)
     {
         int id = parse_minion(in);
         enemy.push_back(push_minion(id));
+
+        int ehp = minion_template[id].local_ehp();
+        add_to_ehp(ehp);
+        init_ehp(ehp, minion_template[id].derivant_id);
     }
 
     for (int i = 0; i < ally_count; i++)
@@ -36,6 +45,10 @@ GameState::GameState(std::istream &in)
         {
             minions[ally[i]].attack_chance = initial_attack_chance[i];
         }
+
+        int ehp = minion_template[id].local_ehp();
+        add_to_ehp(ehp);
+        init_ehp(ehp, minion_template[id].derivant_id);
     }
 }
 
@@ -180,27 +193,10 @@ void GameState::print(std::ostream &out) const
 int GameState::get_enemy_atk_after_Defile()
 {
     int defile_damage = 1;
-    bool hp_exists[MAX_DEFILE_REPEAT + 1];
-
-    for (int i = 0; i <= MAX_DEFILE_REPEAT; i++)
-    {
-        hp_exists[i] = false;
-    }
-
-    for (int i = 0; i < ally.size(); i++)
-    {
-        get_effective_hp(0, minions[ally[i]], hp_exists);
-    }
-    for (int i = 0; i < enemy.size(); i++)
-    {
-        get_effective_hp(0, minions[enemy[i]], hp_exists);
-    }
-
-    while (defile_damage <= MAX_DEFILE_REPEAT && hp_exists[defile_damage])
+    while (defile_damage <= MAX_DEFILE_REPEAT && num_of_ehp[defile_damage] > 0)
     {
         defile_damage++;
     }
-
     int sum = 0;
     for (int i = 0; i < enemy.size(); i++)
     {
@@ -225,6 +221,15 @@ GameState::minion::minion(int id, int atk, int hp, bool shield,
             attack_chance = 2;
         }
     }
+}
+
+inline int GameState::minion::local_ehp()
+{
+    if (immune)
+    {
+        return MAX_DEFILE_REPEAT + 1;
+    }
+    return hp + (shield ? 1 : 0);
 }
 
 void GameState::minion::print(std::ostream &out) const
@@ -476,7 +481,12 @@ void GameState::modify_minion_hp(int instance_id, int new_val)
         minions[instance_id].hp);
     step_size.back()++;
 
+    int old_ehp = minions[instance_id].local_ehp();
     minions[instance_id].hp = new_val;
+    int new_ehp = minions[instance_id].local_ehp();
+    delete_from_ehp(old_ehp);
+    add_to_ehp(new_ehp);
+    update_child_ehp(old_ehp, new_ehp, minions[instance_id].derivant_id);
 }
 
 void GameState::decrement_minion_attack_chance(int instance_id)
@@ -496,7 +506,12 @@ void GameState::remove_minion_shield(int instance_id)
         instance_id);
     step_size.back()++;
 
+    int old_ehp = minions[instance_id].local_ehp();
     minions[instance_id].shield = false;
+    int new_ehp = minions[instance_id].local_ehp();
+    delete_from_ehp(old_ehp);
+    add_to_ehp(new_ehp);
+    update_child_ehp(old_ehp, new_ehp, minions[instance_id].derivant_id);
 }
 
 void GameState::undo_last_operation()
@@ -533,7 +548,12 @@ void GameState::undo_last_operation()
     }
     case OP_MODIFY_HP:
     {
+        int old_ehp = minions[op.instance_id].local_ehp();
         minions[op.instance_id].hp = op.old_hp;
+        int new_ehp = minions[op.instance_id].local_ehp();
+        delete_from_ehp(old_ehp);
+        add_to_ehp(new_ehp);
+        update_child_ehp(old_ehp, new_ehp, minions[op.instance_id].derivant_id);
         break;
     }
     case OP_DECREMENT_ATTACK_CHANCE:
@@ -543,7 +563,12 @@ void GameState::undo_last_operation()
     }
     case OP_REMOVE_SHIELD:
     {
+        int old_ehp = minions[op.instance_id].local_ehp();
         minions[op.instance_id].shield = true;
+        int new_ehp = minions[op.instance_id].local_ehp();
+        delete_from_ehp(old_ehp);
+        add_to_ehp(new_ehp);
+        update_child_ehp(old_ehp, new_ehp, minions[op.instance_id].derivant_id);
         break;
     }
     default:
@@ -592,23 +617,6 @@ void GameState::process_death(Side side, int pos)
     }
 }
 
-void GameState::get_effective_hp(int parent_effective_hp, const minion &m, bool *hp_exists)
-{
-    int effective_hp = parent_effective_hp + m.hp;
-    if (m.shield)
-    {
-        effective_hp++;
-    }
-    if (effective_hp <= MAX_DEFILE_REPEAT)
-    {
-        hp_exists[effective_hp] = true;
-    }
-    for (int child_id : m.derivant_id)
-    {
-        get_effective_hp(effective_hp, minion_template[child_id], hp_exists);
-    }
-}
-
 int GameState::get_atk(int damage, const minion &m)
 {
     int effective_hp = m.hp;
@@ -629,5 +637,43 @@ int GameState::get_atk(int damage, const minion &m)
             sum += get_atk(damage - effective_hp, minion_template[child_id]);
         }
         return sum;
+    }
+}
+
+void GameState::init_ehp(int cumulative_ehp, const std::vector<int> &child_id)
+{
+    for (int id : child_id)
+    {
+        int ehp = cumulative_ehp + minion_template[id].local_ehp();
+        add_to_ehp(ehp);
+        init_ehp(ehp, minion_template[id].derivant_id);
+    }
+}
+
+inline void GameState::add_to_ehp(int ehp)
+{
+    if (unsigned(ehp) <= MAX_DEFILE_REPEAT)
+    {
+        num_of_ehp[ehp]++;
+    }
+}
+
+inline void GameState::delete_from_ehp(int ehp)
+{
+    if (unsigned(ehp) <= MAX_DEFILE_REPEAT)
+    {
+        num_of_ehp[ehp]--;
+    }
+}
+
+void GameState::update_child_ehp(int old_cumulative_ehp, int new_cumulative_ehp, const std::vector<int> &child_id)
+{
+    for (int id : child_id)
+    {
+        int old_ehp = old_cumulative_ehp + minion_template[id].local_ehp();
+        int new_ehp = new_cumulative_ehp + minion_template[id].local_ehp();
+        delete_from_ehp(old_ehp);
+        add_to_ehp(new_ehp);
+        update_child_ehp(old_ehp, new_ehp, minion_template[id].derivant_id);
     }
 }

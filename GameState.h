@@ -43,6 +43,7 @@ private:
 
         const std::vector<int> derivant_id;
 
+        inline int local_ehp();
         void print(std::ostream &out) const;
     };
 
@@ -102,7 +103,12 @@ private:
 
     void process_death(Side side, int pos);
 
-    void get_effective_hp(int parent_effective_hp, const minion &m, bool *hp_exists);
+    int num_of_ehp[MAX_DEFILE_REPEAT + 1];
+    void init_ehp(int cumulative_ehp,const std::vector<int> &child_id);
+    inline void add_to_ehp(int ehp);
+    inline void delete_from_ehp(int ehp);
+    void update_child_ehp(int old_cumulative_ehp,int new_cumulative_ehp,const std::vector<int> &child_id);
+
     int get_atk(int damage, const minion &m);
 };
 #endif
